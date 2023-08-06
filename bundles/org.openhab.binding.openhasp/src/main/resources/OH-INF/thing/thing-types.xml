@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<thing:thing-descriptions bindingId="mqtt"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
+
+	<thing-type id="openhasp_plate" extensible="hasp-button">
+		<supported-bridge-type-refs>
+			<bridge-type-ref id="broker"/>
+			<bridge-type-ref id="systemBroker"/>
+		</supported-bridge-type-refs>
+
+		<label>OpenHASP Plate</label>
+		<description>OpenHASP plate</description>
+		<category>WallSwitch</category>
+
+		<channels>
+			<channel id="backlight" typeId="backlight"/>
+			<channel id="LWT" typeId="lwt"/>
+			<channel id="haspbutton" typeId="system.rawbutton"/>
+		</channels>
+
+		<config-description>
+			<parameter name="deviceId" type="text" required="true">
+				<label>Device ID</label>
+				<description>HASP Place ID. This is part of the MQTT topic, e.g. "hasp/#plateid#".</description>
+			</parameter>
+			<parameter name="configMode" type="text" required="true">
+				<label>Config Mode</label>
+				<description>The device can either be configured manually entering pages and doing the manual mapping or by copying
+					the content of one or more sitemap, in which case the items will be automatically distributed.</description>
+				<options>
+					<option value="sitemap">Sitemap</option>
+					<option value="manual">Manual</option>
+				</options>
+				<default>sitemap</default>
+			</parameter>
+			<parameter name="sitemap" type="text" required="false">
+				<description>The sitemap to copy the items from, it can be a sitemap list separated by comas.</description>
+			</parameter>
+			<parameter name="pages" type="text" required="false" multiple="true">
+				<label>Pages Config</label>
+				<description>Configuration for device's pages</description>
+				<limitToOptions>false</limitToOptions>
+			</parameter>
+			<parameter name="hostname" type="text" required="false">
+				<context>network-address</context>
+				<label>Hostname</label>
+				<description>Hostname or IP address of the device</description>
+			</parameter>
+			<parameter name="password" type="text" required="false">
+				<context>password</context>
+				<label>Password</label>
+				<description>Passwort to access the device</description>
+			</parameter>
+			<parameter name="backlightHigh" type="integer" unit="s" min="0" max="100">
+				<label>Backlight high intensity</label>
+				<description>Brightness when the device is being used.</description>
+				<default>100</default>
+				<advanced>true</advanced>
+			</parameter>
+			<parameter name="backlightMedium" type="integer" unit="s" min="0" max="100">
+				<label>Backlight medium intensity</label>
+				<description>Brightness when the device is idle for a short period of time.</description>
+				<default>50</default>
+				<advanced>true</advanced>
+			</parameter>
+			<parameter name="backlightLow" type="integer" unit="s" min="0" max="100">
+				<label>Backlight low intensity</label>
+				<description>Brightness when the device is idle for a long period of time.</description>
+				<default>20</default>
+				<advanced>true</advanced>
+			</parameter>
+		</config-description>
+	</thing-type>
+
+	<channel-type id="lwt">
+		<item-type>String</item-type>
+		<label>LWT</label>
+		<description>LWT - Status - online or offline.</description>
+	</channel-type>
+
+	<channel-type id="backlight">
+		<item-type>Dimmer</item-type>
+		<label>Backlight</label>
+		<description>Backlight changes the brightness of the backlight.</description>
+		<category>Slider</category>
+		<tags>
+			<tag>Control</tag>
+			<tag>Light</tag>
+		</tags>
+	</channel-type>
+
+	<channel-type id="hasp-button">
+		<item-type>Switch</item-type>
+		<label>OpenHaspButton</label>
+		<config-description>
+			<parameter name="buttonId" type="text">
+				<label>Button Id</label>
+				<description>Button Id from OpenHAS ie. p0b1</description>
+			</parameter>
+		</config-description>
+
+	</channel-type>
+</thing:thing-descriptions>
