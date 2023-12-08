@@ -9,9 +9,11 @@ public class ObjectEvent {
     String event;
     @Nullable
     String val;
+    @Nullable
+    String text;
 
     @Override
     public String toString() {
-        return "ObjectEvent [event=" + event + ", val=" + val + "]";
+        return "ObjectEvent [event=" + event + ", val=" + val + ", text=" + text + "]";
     }
 }

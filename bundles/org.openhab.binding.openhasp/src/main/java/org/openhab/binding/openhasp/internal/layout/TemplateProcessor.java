@@ -4,9 +4,11 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Map;
 
+import org.openhab.binding.openhasp.internal.layout.handlebars.AssignHelper;
 import org.openhab.binding.openhasp.internal.layout.handlebars.ClickObjectHelper;
 import org.openhab.binding.openhasp.internal.layout.handlebars.IncHelper;
 import org.openhab.binding.openhasp.internal.layout.handlebars.MathHelper;
+import org.openhab.binding.openhasp.internal.layout.handlebars.SliderObjectHelper;
 import org.openhab.binding.openhasp.internal.layout.handlebars.StatusLabelHelper;
 import org.openhab.binding.openhasp.internal.layout.handlebars.ToIntHelper;
 import org.slf4j.Logger;
@@ -20,6 +22,7 @@ import com.github.jknack.handlebars.helper.IfHelper;
 //Handles sending all the layout to the HASP device
 
 public class TemplateProcessor {
+    private final static boolean DEBUG = false;
     // private final @NonNullByDefault({}) ClassLoader classLoader = TemplateProcessor.class.getClassLoader();
     private static final Logger logger = LoggerFactory.getLogger(TemplateProcessor.class);
     // private MustacheFactory mustacheFactory;
@@ -39,7 +42,9 @@ public class TemplateProcessor {
         handlebars.registerHelper(IncHelper.NAME, IncHelper.INSTANCE);
         handlebars.registerHelper(ToIntHelper.NAME, ToIntHelper.INSTANCE);
         handlebars.registerHelper(ClickObjectHelper.NAME, ClickObjectHelper.INSTANCE);
+        handlebars.registerHelper(SliderObjectHelper.NAME, SliderObjectHelper.INSTANCE);
         handlebars.registerHelper("statusLabel", new StatusLabelHelper());
+        handlebars.registerHelper(AssignHelper.NAME, AssignHelper.INSTANCE);
     }
 
     public String[] processTemplate(String name, Map<String, String> context) throws IOException {
@@ -64,17 +69,28 @@ public class TemplateProcessor {
 
         // Render the template with the data map
         // mustache.execute(writer, context).flush();
+
         logger.trace("TEMPLATE {}:", name);
 
         String[] lines = renderedJson.split("\n");
         ArrayList<String> cleanLines = new ArrayList<String>();
 
+        if (DEBUG) {
+            cleanLines.add("{\"comment\":\"START TEMPLATE:" + name + "\"}");
+        }
         for (String line : lines) {
             line = line.trim();
             if (line.startsWith("{")) {
                 cleanLines.add(line);
                 logger.trace(line);
+            } else {
+                if (DEBUG && !line.isBlank()) {
+                    cleanLines.add("{\"comment\":\"" + line + "\"}");
+                }
             }
+        }
+        if (DEBUG) {
+            cleanLines.add("{\"comment\":\"END TEMPLATE:" + name + "\"}");
         }
 
         // Output the rendered template

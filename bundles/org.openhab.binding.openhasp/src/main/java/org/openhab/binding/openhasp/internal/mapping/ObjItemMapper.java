@@ -16,15 +16,21 @@ public class ObjItemMapper {
     private HashMap<String, List<ObjItemMapping>> byItemMapping = new HashMap<String, List<ObjItemMapping>>();
 
     public void mapObj(ObjItemMapping mapping) {
-        byObjMapping.put(mapping.objId, mapping);
-        if (mapping.item != null) {
-            List<ObjItemMapping> list = byItemMapping.get(mapping.item);
-            if (list == null) {
-                list = new ArrayList<ObjItemMapping>();
-                byItemMapping.put(mapping.item, list);
-            }
-            list.add(mapping);
+        if (mapping.objId != null) {
+            byObjMapping.put(mapping.objId, mapping);
+            logger.trace("Mapped objId: {}", mapping.objId);
         }
+        if (mapping.sliderId != null) {
+            byObjMapping.put(mapping.sliderId, mapping);
+            logger.trace("Mapped sliderId: {}", mapping.sliderId);
+        }
+
+        List<ObjItemMapping> list = byItemMapping.get(mapping.item);
+        if (list == null) {
+            list = new ArrayList<ObjItemMapping>();
+            byItemMapping.put(mapping.item, list);
+        }
+        list.add(mapping);
     }
 
     public @Nullable List<ObjItemMapping> getByItem(@NonNull String item) {
@@ -32,7 +38,16 @@ public class ObjItemMapper {
     }
 
     public @Nullable ObjItemMapping getByObject(@NonNull String object) {
-        return byObjMapping.get(object);
+        ObjItemMapping res = byObjMapping.get(object);
+        if (res == null) {
+            logger.trace("Couldn't find object {}", object);
+            logKeysByObj();
+        }
+        return res;
+    }
+
+    public HashMap<String, ObjItemMapping> getAllByObject() {
+        return byObjMapping;
     }
 
     public void logKeysByItem() {

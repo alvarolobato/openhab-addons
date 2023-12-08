@@ -3,9 +3,6 @@ package org.openhab.binding.openhasp.internal.layout.handlebars;
 import java.io.IOException;
 import java.util.HashMap;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.github.jknack.handlebars.Helper;
 import com.github.jknack.handlebars.Options;
 
@@ -17,7 +14,7 @@ import com.github.jknack.handlebars.Options;
  * @see java.math.MathContext
  */
 public class IncHelper implements Helper<Object> {
-    private static final Logger logger = LoggerFactory.getLogger(IncHelper.class);
+    // private static final Logger logger = LoggerFactory.getLogger(IncHelper.class);
 
     /**
      * A singleton instance of this helper.
@@ -36,7 +33,7 @@ public class IncHelper implements Helper<Object> {
         Object val = realContext.get(value.toString());
         realContext.put(value.toString(), Integer.toString(Integer.parseInt(val.toString()) + 1));
 
-        logger.error("INC {}:{}", value, val);
+        // logger.error("INC {}:{}", value, val);
         return val.toString();
     }
 }

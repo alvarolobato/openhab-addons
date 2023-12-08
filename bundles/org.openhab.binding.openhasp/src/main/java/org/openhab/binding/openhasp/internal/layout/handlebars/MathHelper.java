@@ -135,7 +135,7 @@ public class MathHelper implements Helper<Object> {
                     throw new IllegalArgumentException("Unknown operation '" + options.param(0) + "'");
             }
             if (scale != null) {
-                result = result.setScale(scale, BigDecimal.ROUND_HALF_UP);
+                result = result.setScale(scale, RoundingMode.HALF_UP);
             }
             return result.toString();
         } else {

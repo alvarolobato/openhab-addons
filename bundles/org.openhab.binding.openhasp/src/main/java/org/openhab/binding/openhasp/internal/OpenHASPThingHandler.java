@@ -14,6 +14,7 @@
 package org.openhab.binding.openhasp.internal;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
@@ -112,8 +113,9 @@ public class OpenHASPThingHandler extends AbstractMQTTThingHandler implements Mq
             if (plate != null) {
                 logger.error("############ There was already a plate object"); // TODO CHECK THIS CASE
             }
+
             plate = new OpenHASPPlate(thingId, plateId, comm, layoutManager, config, sitemapProviders, itemRegistry);
-            comm.setCallbackProcessor(plate);
+            comm.setCallbackProcessor(Objects.requireNonNull(plate));
             // TODO: Move to after creating the plate object
             eventSubscriberRegistration = bundleContext.registerService(EventSubscriber.class.getName(), plate, null);
 
@@ -239,9 +241,11 @@ public class OpenHASPThingHandler extends AbstractMQTTThingHandler implements Mq
                 logger.warn("Plate {} came online, but can't send pages plate object is NULL", plateId);
             }
             updateStatus(ThingStatus.ONLINE, ThingStatusDetail.NONE);
+            plate.onLine();
             logger.trace("OpenHASP plate {}/{} ONLINE", thingId, plateId);
         } else {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE);
+            plate.offLine();
             logger.trace("OpenHASP plate {}/{} OFFLINE", thingId, plateId);
         }
     }

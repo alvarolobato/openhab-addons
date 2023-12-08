@@ -1,0 +1,14 @@
+//Container object
+{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"obj","x": "5","y":{{y}},"w":"310","h":"50","radius":"15","border_side":"0","bg_color":"{{section_bgcolor}}","action":"p{{nextGroupPage}}","bg_grad_dir":"0"}
+
+//Icon background circle
+{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"obj","x":"15","y":{{math y '+' 5}},"w":"40","h":"40","radius":"35","click":"false","border_side":"0","bg_color":"{{icon_bgcolor}}"}
+
+//Icon
+{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"label","x":"15","y":{{math y '+' 5}},"w":"40","h":"40","text":"\uE769","text_font":"32","text_color":"{{icon_color}}","align":"center"}
+
+//Label
+{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"label","x":"60","y": {{math y '+' 10}},"w":"225","h":"40","text":"{{widgetLabel}}","text_font":"24","mode":"scroll"}
+
+//Arrow
+{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"label","x":"280","y": {{math y '+' 5}},"w":"20","h":"40","text":"\uE142","text_font":"32","text_color":"{{icon_color}}"}

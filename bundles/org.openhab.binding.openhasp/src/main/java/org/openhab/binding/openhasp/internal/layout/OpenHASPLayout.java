@@ -1,12 +1,16 @@
 package org.openhab.binding.openhasp.internal.layout;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Properties;
 
-import org.openhab.binding.openhasp.internal.mapping.ObjItemMapper;
+import org.eclipse.jdt.annotation.NonNull;
+import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.openhasp.internal.mapping.ObjItemMapping;
 import org.openhab.binding.openhasp.internal.mapping.ObjItemMapping.ControlType;
 import org.slf4j.Logger;
@@ -23,92 +27,122 @@ public class OpenHASPLayout {
     public static final String PAGE_Y = "y";
     public static final String ITEM = "item";
     public static final String CLICK_OBJECT_ID = "clickObjId";
+    // TODO slideOBJId is used for slider and dropdown etc, maybe convert to secondary object or something simimlar.
     public static final String SLIDE_OBJECT_ID = "slideObjId";
     public static final String STATUS_LABEL_ID = "statusLabelId";
+    public static final String COMPONENTS_VMARGIN = "components_vmargin"; // Vertical margin between components
+    public static final String COMPONENTS_MAX_Y = "components_maxy"; // Max usable vertical space for components
+    public static final String TIME_CONTROL_ID = "time_control_id";
+    public static final String COMP_HEIGHT = "_height";// Height for a specific component
+    public static final String OVERRIDE = "_override";// Height for a specific component
+
+    public static final String MAX_Y = "maxy";
 
     public static final String TPL_COMP_GROUP = "group";
     public static final String TPL_COMP_BUTTON = "button";
     public static final String TPL_COMP_PAGE = "page";
     public static final String TPL_COMP_SLIDER = "slider";
+    public static final String TPL_COMP_SETPOINT = "setpoint";
     public static final String TPL_COMP_SECTION = "section";
-
-    public static final String[] PAGE_INITIAL_TEMPLATE = new String[] { "{id:0,bg_color:#111}",
-            "{page:0,id:1,obj:obj,x:0,y:0,h:35,w:320,bg_color:#1c1c1c,text:,radius:0, bg_grad_dir:0,bg_opa:255,border_width:0}",
-            "{page:0,id:2,obj:label,x:5,y:5,h:30,w:305,text:2022/10/12  3.13 PM,align:left,text_color:#FFF,text_font:24}",
-            "{page:0,id:3,obj:label,x:5,y:5,h:30,w:305,text:1/15,align:right,text_color:#FFF,text_font:24}",
-
-            "{page:0,id:10,obj:btn,action:prev,x:0,y:445,w:107,h:35,bg_color:#1c1c1c,text:,text_color:#FFFFFF,radius:0,border_side:0,text_font:32, bg_grad_dir:0}",
-            "{page:0,id:11,obj:btn,action:back,x:107,y:445,w:107,h:35,bg_color:#1c1c1c,text:,text_color:#FFFFFF,radius:0,border_side:0,text_font:32, bg_grad_dir:0}",
-            "{page:0,id:12,obj:btn,action:next,x:214,y:445,w:107,h:35,bg_color:#1c1c1c,text:,text_color:#FFFFFF,radius:0,border_side:0,text_font:32,bg_grad_dir:0}" };
-
-    // TODO move this to templates
-    public String[] getInitialPage() {
-        return PAGE_INITIAL_TEMPLATE;
-    }
-
-    // TODO Move to properties
-    public static final int MAX_Y = 435;
+    public static final String TPL_COMP_SELECTION = "selection";
 
     private static final Logger logger = LoggerFactory.getLogger(OpenHASPLayout.class);
 
     private Map<String, String> context;
     private TemplateProcessor tplProc;
+    String template;
 
-    public OpenHASPLayout(Map<String, String> context) {
+    public OpenHASPLayout(String template, Map<String, String> context) {
+        this.template = template;
         this.context = context;
+        loadTemplateProperties();
         tplProc = new TemplateProcessor();
     }
 
     public void initiate() {
     }
 
-    public int getHeight(String component) {
-        if (component.equalsIgnoreCase(TPL_COMP_BUTTON)) {
-            return 75;
-        } else if (component.equalsIgnoreCase(TPL_COMP_PAGE)) {
-            return 35;
-        } else if (component.equalsIgnoreCase(TPL_COMP_SLIDER)) {
-            return 110;
-        } else if (component.equalsIgnoreCase(TPL_COMP_SECTION)) {
-            return 30; // TODO: This didn't have margin, maybe change how the margin is calculated
-        } else if (component.equalsIgnoreCase(TPL_COMP_GROUP)) {
-            return 55; // TODO: This didn't have margin, maybe change how the margin is calculated
+    private String getTemplatePath() {
+        return "/templates/" + template + "/";
+    }
+
+    private void loadTemplateProperties() {
+        Properties properties = new Properties();
+        String propertiesPath = getTemplatePath() + "template.properties";
+
+        try (final InputStream stream = this.getClass().getResourceAsStream(propertiesPath)) {
+            if (stream != null) {
+                properties.load(stream);
+                context.putAll((Map) properties);
+            } else {
+                logger.error("Error reading properties from {}", propertiesPath);
+            }
+        } catch (IOException e) {
+            logger.error("Error reading properties from " + propertiesPath, e);
         }
-        return 0;
     }
 
-    public int getVMargin() {
-        return 5; // TODO move to properties
+    private String getComponentTemplate(String name) {
+        return getTemplatePath() + name + ".json";
     }
 
-    private String getTemplate(String name) {
-        return "/templates/" + name + ".json";
+    public String[] getInit() {
+        // TODO Error handling
+        try {
+            return tplProc.processTemplate(getComponentTemplate("init"), context);
+        } catch (IOException e) {
+            logger.error("Error processing template", e);
+            return new String[0];
+        }
     }
 
-    public String[] addComponent(String component, ObjItemMapper objItemMapper) {
+    @Nullable
+    public ObjItemMapping addComponent(String component, ArrayList<String> objectArray) {
         ArrayList<String> result = new ArrayList<String>();
-        int y = getAsInt(context, PAGE_Y);
+        int y = getAsInt(PAGE_Y);
 
         try {
-            result.addAll(Arrays.asList(tplProc.processTemplate(getTemplate(component), context)));
+            result.addAll(Arrays.asList(tplProc.processTemplate(getComponentTemplate(component), context)));
         } catch (IOException e) {
+            // TODO Error handling
             logger.error("Error processing template", e);
         }
         // String clickObject = builder.getObjectId();
-
+        ObjItemMapping mapping = null;
+        // if (component != "page") {
         String clickObject = context.get(CLICK_OBJECT_ID);
         String slideObject = context.get(SLIDE_OBJECT_ID);
         String statusLabel = context.get(STATUS_LABEL_ID);
 
         String item = context.get(ITEM);
-        if (clickObject != null && item != null) {
-            objItemMapper.mapObj(new ObjItemMapping(ControlType.SWITCH, item, clickObject, statusLabel));
-        }
-        if (slideObject != null && item != null) {
-            objItemMapper.mapObj(new ObjItemMapping(ControlType.SLIDER, item, slideObject, statusLabel));
+
+        if (item != null) {
+            // TODO Refactor how to figure out the component type
+            ControlType type = null;
+            if (component.equals(TPL_COMP_BUTTON)) {
+                type = ControlType.SWITCH;
+            } else if (component.equals(TPL_COMP_SLIDER)) {
+                type = ControlType.SLIDER;
+            } else if (component.equals(TPL_COMP_SELECTION)) {
+                type = ControlType.SELECT;
+            } else {
+                logger.warn("Setting default controltype for component {}", component);
+                type = ControlType.SLIDER;
+            }
+            mapping = new ObjItemMapping(type, item, clickObject, statusLabel, slideObject);
+        } else {
+            logger.error("Could not get item from context");
         }
 
-        y = y + getHeight(component) + getVMargin();
+        // if (slideObject != null && item != null) {
+        // objItemMapper.mapObj(new ObjItemMapping(ControlType.SLIDER, item, clickObject, statusLabel,
+        // slideObject));
+        // }
+        // if (clickObject != null && item != null) {
+        // objItemMapper.mapObj(new ObjItemMapping(ControlType.SWITCH, item, clickObject, statusLabel, null));
+        // }
+
+        y = y + getAsInt(component + COMP_HEIGHT) + getAsInt(COMPONENTS_VMARGIN);
         context.put(PAGE_Y, Integer.toString(y));
 
         // reset some values
@@ -116,70 +150,118 @@ public class OpenHASPLayout {
         context.put(SLIDE_OBJECT_ID, null);
         context.put(STATUS_LABEL_ID, null);
         context.put(ITEM, null);
-
-        return result.toArray(new String[result.size()]);
+        // }
+        clearOverrides();
+        objectArray.addAll(result);
+        return mapping;
     }
 
-    static class ObjectBuilder {
-        Map<String, String> context;
-        Map<String, String> attributes;
-        int pageNum;
-        int pageObjId;
-        boolean built = false;
-
-        ObjectBuilder(Map<String, String> context) {
-            this.context = context;
-            pageNum = getAsInt(context, PAGE_NUM);
-            pageObjId = getAsInt(context, PAGE_OBJ_ID);
-            attributes = new HashMap<String, String>();
-        }
-
-        ObjectBuilder withAttr(String key, String value) {
-            attributes.put(key, value);
-            return this;
-        }
-
-        ObjectBuilder withAttr(String key, int value) {
-            attributes.put(key, Integer.toString(value));
-            return this;
-        }
-
-        String build() {
-            StringBuilder buffer = new StringBuilder();
-            buffer.append("{page:").append(pageNum).append(",id:").append(pageObjId);
-            attributes.forEach((k, v) -> buffer.append(",").append(k).append(":").append(v));
-            buffer.append("}");
-
-            if (!built) {
-                context.put(PAGE_OBJ_ID, Integer.toString(pageObjId + 1));
-            }
-
-            built = true;
-            return buffer.toString();
-        }
-
-        public String getObjectId() {
-            return "p" + pageNum + "b" + pageObjId;
-        }
-
-        public Map<String, String> getAttributes() {
-            return attributes;
-        }
+    public int getAsInt(String key) {
+        return getAsInt(context, key);
     }
 
     public static int getAsInt(Map<String, String> context, String key) {
-        String value = context.get(key);
+        String value = context.get(key + OVERRIDE); // Check if the value was overriden
+        boolean overriden = true;
+
         if (value == null) {
-            return 0;
+            value = context.get(key);
+            overriden = false;
+        }
+
+        if (value != null) {
+            try {
+                return Integer.parseInt(value);
+            } catch (NumberFormatException e) {
+                logger.error("Could not parse key: {} in context to integer. Value:{}",
+                        overriden ? key + OVERRIDE : key, value);
+            }
         } else {
-            return Integer.parseInt(value);
+            logger.error("Couln't find key: {} in context", overriden ? key + OVERRIDE : key);
+        }
+        return 0;
+    }
+
+    private void clearOverrides() {
+        Iterator<Entry<String, String>> iterator = context.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Entry<String, String> entry = iterator.next();
+            String key = entry.getKey();
+            if (key.endsWith(OVERRIDE)) {
+                iterator.remove();
+                logger.error("Removed key {}", key);
+            }
         }
     }
 
     public static String getObjectId(String pageNum, String pageObjId) {
         return "p" + pageNum + "b" + pageObjId;
     }
+
+    public @NonNull String getAsString(String key) {
+        String value = context.get(key + OVERRIDE); // Check if the value was overriden
+        boolean overriden = true;
+
+        if (value == null) {
+            value = context.get(key);
+            overriden = false;
+        }
+
+        if (value != null) {
+            return value;
+        } else {
+            logger.error("Couln't find key: {} in context", overriden ? key + OVERRIDE : key);
+        }
+        return "";
+    }
 }
+
+// static class ObjectBuilder {
+// Map<String, String> context;
+// Map<String, String> attributes;
+// int pageNum;
+// int pageObjId;
+// boolean built = false;
+
+// ObjectBuilder(Map<String, String> context) {
+// this.context = context;
+// pageNum = getAsInt(context, PAGE_NUM);
+// pageObjId = getAsInt(context, PAGE_OBJ_ID);
+// attributes = new HashMap<String, String>();
+// }
+
+// ObjectBuilder withAttr(String key, String value) {
+// attributes.put(key, value);
+// return this;
+// }
+
+// ObjectBuilder withAttr(String key, int value) {
+// attributes.put(key, Integer.toString(value));
+// return this;
+// }
+
+// String build() {
+// StringBuilder buffer = new StringBuilder();
+// buffer.append("{page:").append(pageNum).append(",id:").append(pageObjId);
+// attributes.forEach((k, v) -> buffer.append(",").append(k).append(":").append(v));
+// buffer.append("}");
+
+// if (!built) {
+// context.put(PAGE_OBJ_ID, Integer.toString(pageObjId + 1));
+// }
+
+// built = true;
+// return buffer.toString();
+// }
+
+// public String getObjectId() {
+// return "p" + pageNum + "b" + pageObjId;
+// }
+
+// public Map<String, String> getAttributes() {
+// return attributes;
+// }
+// }
 
 // public static final String[] PAGE_TEMPLATE = new String[] { "{page:1,id:0,bg_color:#111}" };
 

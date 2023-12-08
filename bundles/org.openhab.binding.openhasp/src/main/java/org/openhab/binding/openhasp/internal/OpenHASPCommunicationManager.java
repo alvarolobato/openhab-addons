@@ -5,6 +5,7 @@ import static org.openhab.binding.openhasp.internal.OpenHASPBindingConstants.HAS
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.openhasp.internal.OpenHASPBindingConstants.CommandType;
 import org.openhab.core.io.transport.mqtt.MqttBrokerConnection;
@@ -12,6 +13,7 @@ import org.openhab.core.io.transport.mqtt.MqttMessageSubscriber;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+@NonNullByDefault
 public class OpenHASPCommunicationManager implements MqttMessageSubscriber {
     private static final Logger logger = LoggerFactory.getLogger(OpenHASPCommunicationManager.class);
 
@@ -24,8 +26,8 @@ public class OpenHASPCommunicationManager implements MqttMessageSubscriber {
     private String plateJSONCmdTopic = "";
     private String plateJSONLCmdTopic = "";
     private MqttBrokerConnection connection;
-    @Nullable
-    OpenHASPCallbackProcessor callbackProcessor;
+
+    private @Nullable OpenHASPCallbackProcessor callbackProcessor;
 
     public OpenHASPCommunicationManager(String plateId, MqttBrokerConnection connection) {
         this.plateId = plateId;
@@ -65,7 +67,7 @@ public class OpenHASPCommunicationManager implements MqttMessageSubscriber {
                 }
                 jsonCommand.append("']");
                 formattedCmd = jsonCommand.toString();
-                logger.trace("Send Command to plate {}, command was {}", plateId, formattedCmd);
+                // logger.trace("Send Command to plate {}, command was {}", plateId, formattedCmd);
                 connection.publish(plateJSONCmdTopic, formattedCmd.getBytes(), 1, true);
                 break;
             case JSONL:
@@ -74,7 +76,7 @@ public class OpenHASPCommunicationManager implements MqttMessageSubscriber {
                     jsonLCommand.append(command).append("\n");
                 }
                 formattedCmd = jsonLCommand.toString();
-                logger.trace("Send Command to plate {}, command was {}", plateId, formattedCmd);
+                // logger.trace("Send Command to plate {}, command was {}", plateId, formattedCmd);
                 connection.publish(plateJSONLCmdTopic, formattedCmd.getBytes(), 1, true);
                 break;
             case CMD:
@@ -97,7 +99,8 @@ public class OpenHASPCommunicationManager implements MqttMessageSubscriber {
         String strippedTopic = topic.substring(plateBaseTopic.length() + 1);
 
         logger.trace("MESSAGE Plate {} state {}:{}", plateId, strippedTopic, value);
-        if (callbackProcessor != null) {
+
+        if (callbackProcessor != null && strippedTopic != null) {
             callbackProcessor.plateCallback(strippedTopic, value);
         }
     }
