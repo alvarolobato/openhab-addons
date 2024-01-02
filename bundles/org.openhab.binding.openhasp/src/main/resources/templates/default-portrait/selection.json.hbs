@@ -1,8 +1,11 @@
-//Container object
-{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"obj","x": "5","y":{{y}},"w":"310","h":"{{selection_height}}","radius":"15","border_side":"0","bg_color":"{{section_bgcolor}}","bg_grad_dir":"0"}
+//Container Object
+{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"obj","x":"5","y":"{{y}}","w":"310","h":"40","radius":"15","click":"true","border_side":"0","bg_color":"{{item_bgcolor}}","bg_grad_dir":"0"}
+        
+//Icon
+{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"label","x":"10","y":{{math y '+' 5}},"w":"30","h":"30","text":"\uE769","text_font":"64","text_color":"{{icon_color}}","align":"center","click":"false"}
 
-//Label
-{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"label","x":"15","y":{{math y '+' 5}},"w":"285","h":"{{text_sub_height}}","text":"{{widgetLabel}}","text_font":"{{text_sub_fontsize}}","text_color":"{{text_sub_color}}","mode":"scroll"}
+//Label name
+{{objId "label"}}{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"label","x":"45","y":{{math y '+' 5}},"w":"120","h":"{{text_height}}","text":"{{widgetLabel}}","mode":"scroll","text_font":"{{text_fontsize}}","click":"false"}
 
 //Dropdown
-{{sliderObj}}{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"dropdown","x":"15","y": {{math y '+' text_sub_height}},"w":"285","h":"{{text_height}}","options":"{{widgetOptions}}","val":"{{widgetVal}}","text_font":"{{text_fontsize}}","mode":"scroll"}
+{{objId "select"}}{{sliderObj}}{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"dropdown","x":{{math 320 '-' 150}},"y": {{math y '-' 2}},"w":"140","h":"{{math text_height '-' 10}}","options":"{{widgetOptions}}","val":"{{widgetVal}}","text_font":"{{text_fontsize}}","mode":"scroll", "bg_color":"{{item_bgcolor}}", "bg_grad_color":"{{item_bgcolor}}", "border_color":"{{item_bgcolor}}"}

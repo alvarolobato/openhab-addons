@@ -6,39 +6,40 @@ import java.util.List;
 
 import org.eclipse.jdt.annotation.NonNull;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.core.items.Item;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class ObjItemMapper {
 
     final Logger logger = LoggerFactory.getLogger(ObjItemMapper.class);
-    private HashMap<String, ObjItemMapping> byObjMapping = new HashMap<String, ObjItemMapping>();
-    private HashMap<String, List<ObjItemMapping>> byItemMapping = new HashMap<String, List<ObjItemMapping>>();
+    private HashMap<String, IObjItemMapping> byObjMapping = new HashMap<String, IObjItemMapping>();
+    private HashMap<String, List<IObjItemMapping>> byItemMapping = new HashMap<String, List<IObjItemMapping>>();
 
-    public void mapObj(ObjItemMapping mapping) {
-        if (mapping.objId != null) {
-            byObjMapping.put(mapping.objId, mapping);
-            logger.trace("Mapped objId: {}", mapping.objId);
-        }
-        if (mapping.sliderId != null) {
-            byObjMapping.put(mapping.sliderId, mapping);
-            logger.trace("Mapped sliderId: {}", mapping.sliderId);
+    public void mapObj(IObjItemMapping mapping) {
+
+        for (String id : mapping.getIds()) {
+            byObjMapping.put(id, mapping);
+            logger.trace("Mapped objId: {}", id);
         }
 
-        List<ObjItemMapping> list = byItemMapping.get(mapping.item);
-        if (list == null) {
-            list = new ArrayList<ObjItemMapping>();
-            byItemMapping.put(mapping.item, list);
+        Item item = mapping.getItem();
+        if (item != null) {
+            List<IObjItemMapping> list = byItemMapping.get(item.getName());
+            if (list == null) {
+                list = new ArrayList<IObjItemMapping>();
+                byItemMapping.put(item.getName(), list);
+            }
+            list.add(mapping);
         }
-        list.add(mapping);
     }
 
-    public @Nullable List<ObjItemMapping> getByItem(@NonNull String item) {
+    public @Nullable List<IObjItemMapping> getByItem(@NonNull String item) {
         return byItemMapping.get(item);
     }
 
-    public @Nullable ObjItemMapping getByObject(@NonNull String object) {
-        ObjItemMapping res = byObjMapping.get(object);
+    public @Nullable IObjItemMapping getByObject(@NonNull String object) {
+        IObjItemMapping res = byObjMapping.get(object);
         if (res == null) {
             logger.trace("Couldn't find object {}", object);
             logKeysByObj();
@@ -46,7 +47,7 @@ public class ObjItemMapper {
         return res;
     }
 
-    public HashMap<String, ObjItemMapping> getAllByObject() {
+    public HashMap<String, IObjItemMapping> getAllByObject() {
         return byObjMapping;
     }
 

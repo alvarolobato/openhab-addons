@@ -11,7 +11,7 @@
             
 //Container object text
 {{#if pageLoc}}
-{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"obj", "x":"0", "y":35,"w":"320", "h":"{{text_sub_height}}", "radius":"0", "bg_grad_dir":"0", "bg_opa":"255", "border_width":"0", "bg_color":"{{section_bgcolor}}"}
+{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"obj", "x":"0", "y":35,"w":"320", "h":"{{text_sub_height}}", "radius":"0", "bg_grad_dir":"0", "bg_opa":"255", "border_width":"0", "bg_color":"{{header_bgcolor}}"}
 {{/if}}
 //Back link
 {{#if pageLocRePg}}
@@ -20,11 +20,11 @@
 
 //Page location
 {{#if pageLoc}}
-{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"label","x": "40","y":35,"w":"280","h":"{{text_sub_height}}","text":"{{pageLoc}}","text_font":"{{text_sub_fontsize}}","mode":"scroll","bg_color":"{{section_bgcolor}}"}
+{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"label","x": "40","y":35,"w":"280","h":"{{text_sub_height}}","text":"{{pageLoc}}","text_font":"{{text_sub_fontsize}}","mode":"scroll","bg_color":"{{header_bgcolor}}"}
 {{else}}
     {{#assign "page_height_override"}}{{math page_height '-' text_sub_height}}{{/assign}}
 {{/if}}
 
 //Page Number
-{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"obj","x":"280","y":"0","h":"35","w":"40","bg_color":"{{section_bgcolor}}","radius":"0","bg_grad_dir":"0","bg_opa":"255","border_width":"0"}
+{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"obj","x":"280","y":"0","h":"35","w":"40","bg_color":"{{header_bgcolor}}","radius":"0","bg_grad_dir":"0","bg_opa":"255","border_width":"0"}
 {"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"label","x":"280","y":"0","h":"30","w":"40","text":"{{pageNum}}","align":"right","text_color":"{{text_color}}","text_font":"24"}

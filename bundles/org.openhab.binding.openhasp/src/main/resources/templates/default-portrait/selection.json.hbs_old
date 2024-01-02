@@ -1,0 +1,8 @@
+//Container object
+{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"obj","x": "5","y":{{y}},"w":"310","h":"{{selection_height}}","radius":"15","border_side":"0","bg_color":"{{section_bgcolor}}","bg_grad_dir":"0"}
+
+//Label
+{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"label","x":"15","y":{{math y '+' 5}},"w":"285","h":"{{text_sub_height}}","text":"{{widgetLabel}}","text_font":"{{text_sub_fontsize}}","text_color":"{{text_sub_color}}","mode":"scroll"}
+
+//Dropdown
+{{objId "select"}}{{sliderObj}}{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"dropdown","x":{{math 320 '-' 130}},"y": {{math y '+' text_sub_height}},"w":"120","h":"{{text_height}}","options":"{{widgetOptions}}","val":"{{widgetVal}}","text_font":"{{text_fontsize}}","mode":"scroll"}

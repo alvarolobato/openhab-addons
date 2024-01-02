@@ -6,14 +6,16 @@ import org.eclipse.jdt.annotation.Nullable;
 @NonNullByDefault
 public class ObjectEvent {
     @Nullable
-    String event;
+    public String source;
     @Nullable
-    String val;
+    public String event;
     @Nullable
-    String text;
+    public String val;
+    @Nullable
+    public String text;
 
     @Override
     public String toString() {
-        return "ObjectEvent [event=" + event + ", val=" + val + ", text=" + text + "]";
+        return "ObjectEvent [source=" + source + " event=" + event + ", val=" + val + ", text=" + text + "]";
     }
 }

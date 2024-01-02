@@ -38,6 +38,19 @@
 			<parameter name="sitemap" type="text" required="false">
 				<description>The sitemap to copy the items from, it can be a sitemap list separated by comas.</description>
 			</parameter>
+			<parameter name="templatePathType" type="text" required="false" multiple="false">
+				<label>Template Path Type</label>
+				<description>Type of path to load the template from</description>
+				<options>
+					<option value="classpath">Classpath</option>
+					<option value="file">File</option>
+				</options>
+				<default>classpath</default>
+			</parameter>
+			<parameter name="templatePath" type="text" required="false" multiple="false">
+				<label>Template Path</label>
+				<description>Alternative path to read the template from</description>
+			</parameter>
 			<parameter name="pages" type="text" required="false" multiple="true">
 				<label>Pages Config</label>
 				<description>Configuration for device's pages</description>

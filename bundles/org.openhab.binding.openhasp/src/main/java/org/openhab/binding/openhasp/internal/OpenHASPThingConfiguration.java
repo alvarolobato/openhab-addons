@@ -26,6 +26,8 @@ import org.eclipse.jdt.annotation.Nullable;
 public class OpenHASPThingConfiguration {
 
     public String deviceId = "";
+    public String templatePathType = "";
+    public String templatePath = "";
     public ArrayList<String> pages = new ArrayList<>();
     public @Nullable String hostname;
     public @Nullable String password;

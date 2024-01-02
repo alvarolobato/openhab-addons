@@ -79,7 +79,6 @@ public class OpenHaspService {
         for (OpenHASPPlateListener listener : listeners) {
             try {
                 listener.onTimerEvent();
-                ;
             } catch (Exception e) {
                 logger.error("An exception occurred while calling onTimerEvent for {}", listener, e);
             }

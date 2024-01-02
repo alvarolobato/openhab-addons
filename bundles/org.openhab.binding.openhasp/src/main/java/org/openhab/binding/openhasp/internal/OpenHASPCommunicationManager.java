@@ -3,6 +3,8 @@ package org.openhab.binding.openhasp.internal;
 import static org.openhab.binding.openhasp.internal.OpenHASPBindingConstants.HASP_BASE_TOPIC;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
@@ -46,37 +48,54 @@ public class OpenHASPCommunicationManager implements MqttMessageSubscriber {
     }
 
     public void sendHASPCommand(CommandType type, String command) {
-        sendHASPCommand(type, new String[] { command });
+        sendHASPCommand(type, Arrays.asList(new String[] { command }));
     }
 
-    public void sendHASPCommand(CommandType type, String[] commands) {
+    public void sendHASPCommand(CommandType type, List<String> commands) {
         // if (ThingStatus.ONLINE.equals(thing.getStatus())) {
-        String formattedCmd;
+        int jsonLimit = 500;
+
         switch (type) {
             case JSON:
                 StringBuffer jsonCommand = new StringBuffer();
                 boolean first = true;
-                jsonCommand.append("['");
-                for (String command : commands) {
+                for (int i = 0; i < commands.size(); i++) {
+                    String command = commands.get(i);
+
+                    if ((jsonCommand.length() + command.length() + 5) >= jsonLimit) {
+                        // do send if we get over the size
+                        jsonCommand.append("']");
+                        String formattedCmd = jsonCommand.toString();
+                        logger.trace("Send Full Command list to plate {}, command was {}", plateId, formattedCmd);
+                        connection.publish(plateJSONCmdTopic, formattedCmd.getBytes(), 1, true);
+                        first = true;
+                    }
+
                     if (first) {
+                        jsonCommand.append("['");
                         first = false;
                     } else {
                         jsonCommand.append("','");
                     }
+
+                    logger.trace("Send Command to plate {}, command {}", plateId, command);
                     jsonCommand.append(command);
                 }
-                jsonCommand.append("']");
-                formattedCmd = jsonCommand.toString();
-                // logger.trace("Send Command to plate {}, command was {}", plateId, formattedCmd);
-                connection.publish(plateJSONCmdTopic, formattedCmd.getBytes(), 1, true);
+
+                if (!first) {
+                    jsonCommand.append("']");
+                    String formattedCmd = jsonCommand.toString();
+                    logger.trace("Send Full Command list to plate {}, command was {}", plateId, formattedCmd);
+                    connection.publish(plateJSONCmdTopic, formattedCmd.getBytes(), 1, true);
+                }
                 break;
             case JSONL:
                 StringBuffer jsonLCommand = new StringBuffer();
                 for (String command : commands) {
                     jsonLCommand.append(command).append("\n");
                 }
-                formattedCmd = jsonLCommand.toString();
-                // logger.trace("Send Command to plate {}, command was {}", plateId, formattedCmd);
+                String formattedCmd = jsonLCommand.toString();
+                logger.trace("Send Command to plate {}, command was {}", plateId, formattedCmd);
                 connection.publish(plateJSONLCmdTopic, formattedCmd.getBytes(), 1, true);
                 break;
             case CMD:

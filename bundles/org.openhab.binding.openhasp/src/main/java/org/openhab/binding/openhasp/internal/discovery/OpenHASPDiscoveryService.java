@@ -61,7 +61,7 @@ public class OpenHASPDiscoveryService extends AbstractMQTTDiscovery {
     public void receivedMessage(ThingUID connectionBridge, MqttBrokerConnection connection, String topic,
             byte[] payload) {
         // Check if this is the discovery topic of the device
-        if (!topic.endsWith("/discovery")) {
+        if (!topic.contains("/discovery/")) {
             return;
         }
 

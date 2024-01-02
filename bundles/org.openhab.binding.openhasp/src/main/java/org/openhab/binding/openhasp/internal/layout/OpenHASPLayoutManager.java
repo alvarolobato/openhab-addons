@@ -10,27 +10,37 @@ import static org.openhab.binding.openhasp.internal.layout.OpenHASPLayout.getAsI
 
 import java.text.DecimalFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map.Entry;
+import java.util.Set;
 
 import org.eclipse.emf.common.util.EList;
 import org.eclipse.jdt.annotation.NonNull;
+import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.openhasp.internal.OpenHASPBindingConstants.CommandType;
 import org.openhab.binding.openhasp.internal.OpenHASPCommunicationManager;
+import org.openhab.binding.openhasp.internal.OpenHASPThingConfiguration;
 import org.openhab.binding.openhasp.internal.Util;
+import org.openhab.binding.openhasp.internal.layout.components.ButtonWidget;
+import org.openhab.binding.openhasp.internal.layout.components.IComponent;
+import org.openhab.binding.openhasp.internal.layout.components.PageWidget;
+import org.openhab.binding.openhasp.internal.layout.components.SectionWidget;
+import org.openhab.binding.openhasp.internal.layout.components.SelectionWidget;
+import org.openhab.binding.openhasp.internal.layout.components.SliderWidget;
+import org.openhab.binding.openhasp.internal.layout.components.TextWidget;
+import org.openhab.binding.openhasp.internal.mapping.IObjItemMapping;
 import org.openhab.binding.openhasp.internal.mapping.ObjItemMapper;
 import org.openhab.binding.openhasp.internal.mapping.ObjItemMapping;
+import org.openhab.core.events.Event;
 import org.openhab.core.items.Item;
 import org.openhab.core.items.ItemRegistry;
-import org.openhab.core.library.types.DecimalType;
-import org.openhab.core.library.types.QuantityType;
+import org.openhab.core.items.events.ItemEvent;
 import org.openhab.core.model.sitemap.sitemap.Chart;
 import org.openhab.core.model.sitemap.sitemap.Frame;
 import org.openhab.core.model.sitemap.sitemap.Group;
 import org.openhab.core.model.sitemap.sitemap.LinkableWidget;
-import org.openhab.core.model.sitemap.sitemap.Mapping;
 import org.openhab.core.model.sitemap.sitemap.Selection;
 import org.openhab.core.model.sitemap.sitemap.Setpoint;
 import org.openhab.core.model.sitemap.sitemap.Sitemap;
@@ -39,13 +49,12 @@ import org.openhab.core.model.sitemap.sitemap.Switch;
 import org.openhab.core.model.sitemap.sitemap.Text;
 import org.openhab.core.model.sitemap.sitemap.Widget;
 import org.openhab.core.types.State;
-import org.openhab.core.types.StateDescription;
-import org.openhab.core.types.UnDefType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 // import com.google.gson.Gson;
 //know about the items and stuff in openhab and send the layout to OpenHASPLayout to format
+@NonNullByDefault
 public class OpenHASPLayoutManager {
     private static final Logger logger = LoggerFactory.getLogger(OpenHASPLayoutManager.class);
     private final static DecimalFormat setPointFormat = new DecimalFormat("#0.#");
@@ -54,34 +63,53 @@ public class OpenHASPLayoutManager {
     String plateId;
     protected ObjItemMapper objItemMapper;
     protected OpenHASPCommunicationManager comm;
+    protected OpenHASPThingConfiguration config;
     HashMap<String, String> context;
     OpenHASPLayout layout;
 
     ArrayList<List<String>> pages;
     ArrayList<String> objectArray;
+    ArrayList<String> pendingCommands;
     ItemRegistry itemRegistry;
 
+    String templatePath;
+    boolean templatePathFileType = false; // if true will load from file, otherwhise from classpath
+
     public OpenHASPLayoutManager(String thingId, String plateId, OpenHASPCommunicationManager comm,
-            ItemRegistry itemRegistry) {
+            OpenHASPThingConfiguration config, ItemRegistry itemRegistry) {
         objItemMapper = new ObjItemMapper();
         this.thingId = thingId;
         this.plateId = plateId;
         this.comm = comm;
+        this.config = config;
         this.itemRegistry = itemRegistry;
+
+        templatePathFileType = "file".equalsIgnoreCase(config.templatePathType);
+        templatePath = config.templatePath;
+        if (templatePath == null || templatePath.isEmpty()) {
+            templatePath = "/templates/default-portrait/";
+        } else {
+            if (!templatePath.endsWith("/")) {
+                templatePath = templatePath + "/";
+            }
+        }
+
         context = new HashMap<String, String>();
-        layout = new OpenHASPLayout("default-portrait", context);
+        layout = new OpenHASPLayout(templatePath, templatePathFileType, context);
         pages = new ArrayList<List<String>>(0);
         // TODO should disapear and be replaced by pages
         objectArray = new ArrayList<String>(0);
+        pendingCommands = new ArrayList<String>(0);
         layout.initiate();
     }
 
+    // TODO Multi-sitemap support
     public void loadFromSiteMap(Sitemap sitemap) {
         String sitemapLabel = sitemap.getLabel();
         // Properties prop=new Properties();
         // prop.load(null);
 
-        objectArray.addAll(Arrays.asList(layout.getInit()));
+        objectArray.addAll(layout.getInit());
 
         // TODO move this decision to the properties file
         // Decides if we show the sitemap name on every top level page
@@ -181,11 +209,10 @@ public class OpenHASPLayoutManager {
             String nextGroupPage = "";
 
             boolean isGroup = false;
-            String component = "";
+            // String component = "";
 
             String itemName = w.getItem();
 
-            @Nullable
             Item item = itemRegistry.get(itemName);
 
             @Nullable
@@ -193,18 +220,25 @@ public class OpenHASPLayoutManager {
             if (item != null) {
                 itemState = item.getState();
             }
+            // else {
+            // logger.error("Item for {}:{} was NULL", w, itemName);
+            // }
 
-            String widgetLabel = getWidgetLabel(w, itemState);
+            // String widgetLabel = getWidgetLabel(w, itemState);
 
-            String[] positionValues = null;
+            IComponent comp = null;
             if (w instanceof Slider) {
-                component = OpenHASPLayout.TPL_COMP_SLIDER;
+                // component = OpenHASPLayout.TPL_COMP_SLIDER;
+                comp = new SliderWidget(context, w, item);
+                // TODO set position
             } else if (w instanceof Switch) {
-                component = OpenHASPLayout.TPL_COMP_BUTTON;
+                comp = new ButtonWidget(context, w, item);
+                // component = OpenHASPLayout.TPL_COMP_BUTTON;
             } else if (w instanceof Frame) {
-                component = OpenHASPLayout.TPL_COMP_SECTION;
+                // component = OpenHASPLayout.TPL_COMP_SECTION;
+                comp = new SectionWidget(context, w, item);
             } else if (w instanceof Group | (w instanceof Text && !((Text) w).getChildren().isEmpty())) {
-                logger.trace("GROUP IGNORED!! item: {} itemState {} label:{}", itemName, itemState, widgetLabel);
+                logger.trace("GROUP IGNORED!! item: {} itemState {}", itemName, itemState);
                 continue;
                 // component = OpenHASPLayout.TPL_COMP_GROUP;
                 // isGroup = false;
@@ -253,7 +287,8 @@ public class OpenHASPLayoutManager {
                 //// OLD GROUP CODE
 
             } else if (w instanceof Text) { // Text without children
-                component = OpenHASPLayout.TPL_COMP_SECTION;
+                // component = OpenHASPLayout.TPL_COMP_TEXT;
+                comp = new TextWidget(context, w, item);
                 // TODO Change to a specific implementation
                 // if (itemState != null && !(itemState instanceof UnDefType)) {
                 // // logger.trace("Formating widget {}, itemState {}, itemStateClass {},item {}, label {}", w,
@@ -268,97 +303,121 @@ public class OpenHASPLayoutManager {
                 // w.getClass().getSimpleName(), w.getItem(), w.getLabel());
 
             } else if (w instanceof Selection) {
-                component = OpenHASPLayout.TPL_COMP_SELECTION;
+                // component = OpenHASPLayout.TPL_COMP_SELECTION;
                 Selection sel = (Selection) w;
-                int intVal = 0;
-                intVal = getItemStateIntVal(itemState);
-                StringBuffer options = new StringBuffer();
-                positionValues = new String[sel.getMappings().size()];
-                int i = 0;
-                for (Mapping mapping : sel.getMappings()) {
-                    options.append(mapping.getLabel()).append("-").append(mapping.getCmd()).append("\\n");
-                    positionValues[i] = mapping.getCmd();
-                    i++;
-                }
-                context.put("widgetOptions", options.toString()); // options in the dropdown
-                context.put("widgetVal", Integer.toString(intVal)); // number of selected option
+                comp = new SelectionWidget(context, sel, item);
             } else if (w instanceof Chart) {
                 // TODO: Not Implemented
                 continue;
             } else if (w instanceof Setpoint) {
-                double doubleVal = getItemStateDoubletVal(itemState);
+                // double doubleVal = getItemStateDoubletVal(itemState);
 
-                component = OpenHASPLayout.TPL_COMP_SETPOINT;
-                context.put("widgetVal", setPointFormat.format(doubleVal)); // number of selected option
+                // component = OpenHASPLayout.TPL_COMP_SETPOINT;
+                // context.put("widgetVal", setPointFormat.format(doubleVal)); // number of selected option
             } else {
-                component = OpenHASPLayout.TPL_COMP_SECTION;
-                context.put("widgetLabel", "*" + widgetLabel);
-                logger.trace("NOT IMPLEMENTED Page: {} - {} (Item:{},Label:{})", context.get(PAGE_NUM),
-                        w.getClass().getSimpleName(), w.getItem(), w.getLabel());
+                comp = new TextWidget(context, w, item);
+                // component = OpenHASPLayout.TPL_COMP_SECTION;
+                // context.put("widgetLabel", "*" + widgetLabel);
+                // logger.trace("NOT IMPLEMENTED Page: {} - {} (Item:{},Label:{})", context.get(PAGE_NUM),
+                // w.getClass().getSimpleName(), w.getItem(), w.getLabel());
             }
 
-            // Ensure there's enough height
-            int y = getAsInt(context, PAGE_Y);
-            int height = layout.getAsInt(component + OpenHASPLayout.COMP_HEIGHT);
-            if (y + height > compMaxY) {
-                newPage(objectArray);
-                y = getAsInt(context, PAGE_Y);
-            }
+            if (comp != null) {
+                // Ensure there's enough height
+                int y = getAsInt(context, PAGE_Y);
+                int height = comp.getHeight();
+                if (y + height > compMaxY
+                        // also if it is a section
+                        || comp.getComponent() == OpenHASPLayout.TPL_COMP_SECTION
+                                && !"1".equals(context.get("isBlankPage"))) {
 
-            context.put("item", itemName);
-            context.put("widgetLabel", widgetLabel);
-            logger.trace("ItemName:{}", itemName);
-
-            // Actually add the component
-            logger.trace("Adding component {}", component);
-            ObjItemMapping mapping = layout.addComponent(component, objectArray);
-
-            if (mapping != null) {
-                if (positionValues != null) {
-                    mapping.positionValues = positionValues;
+                    newPage(objectArray);
+                    y = getAsInt(context, PAGE_Y);
                 }
 
-                objItemMapper.mapObj(mapping);
-            }
+                // int y = getAsInt(context, PAGE_Y);
+                // int height = layout.getAsInt(component + OpenHASPLayout.COMP_HEIGHT);
+                // if (y + height > compMaxY
+                // // also if it is a section
+                // || component == OpenHASPLayout.TPL_COMP_SECTION && !"1".equals(context.get("isBlankPage"))) {
 
-            if (isGroup) {
-                // TODO review
-                // Prepare to create the group destination pages
-                currentPage = context.get(PAGE_NUM);
-                currentY = context.get(PAGE_Y);
-                currentObjId = context.get(PAGE_OBJ_ID);
-                previousLocation = context.get(PAGE_LOCATION);
-                previousReturnPage = context.get(PAGE_LOCATION_RETURN_PAGE);
-                nextGroupPage = context.getOrDefault("nextGroupPage", "");
+                // newPage(objectArray);
+                // y = getAsInt(context, PAGE_Y);
+                // }
 
-                // context.put(PREVIOUS_PAGE_NUM, currentPage);
-                context.put(PAGE_NUM, nextGroupPage);
-                // context.put(PAGE_Y, "0");
-                // context.put(PAGE_OBJ_ID, "0");
-                logger.trace("GROUP!! item: {} label:{}", itemName, widgetLabel);
-                context.put(PAGE_LOCATION, widgetLabel);
-                context.put(PAGE_LOCATION_RETURN_PAGE, currentPage);
+                // if (comp == null) {
+                // context.put("item", itemName);
+                // context.put("widgetLabel", widgetLabel);
+                // }
 
-                newPage(objectArray);
-                isGroup = true;
+                // Actually add the component
+                ObjItemMapping mapping;
+                logger.trace("Adding component {}", comp);
+                // if (comp != null) {
 
-                // objectArray.addAll(Arrays.asList(OpenHASPLayout.addSection(context)));
+                layout.addComponent(comp, objectArray);
+                objItemMapper.mapObj(comp);
 
-                // TODO If there is a recursive group we run into problems, should process
-                // groups later
-                int next = Integer.parseInt(nextGroupPage) + 5;
-                context.put("nextGroupPage", Integer.toString(next));
-                processWidgetList(((LinkableWidget) w).getChildren());
+                // if (mapping != null) {
+                // if (positionValues != null) {
+                // mapping.positionValues = positionValues;
+                // }
+                // objItemMapper.mapObj(mapping);
+                // }
+                // } else {
+                // mapping = layout.addComponent(component, objectArray);
+                // if (mapping != null) {
+                // if (positionValues != null) {
+                // mapping.positionValues = positionValues;
+                // }
+                // objItemMapper.mapObj(mapping);
+                // }
+                // }
 
-                // int endPage = Integer.parseInt(context.getOrDefault(OpenHASPLayout.PAGE_NUM,
-                // "0")) + 1;
-                // context.put("nextGroupPage", Integer.toString(endPage));
+                context.put("isBlankPage", "0");
 
-                context.put(PAGE_NUM, currentPage);
-                context.put(PAGE_Y, currentY);
-                context.put(PAGE_OBJ_ID, currentObjId);
-                context.put(PAGE_LOCATION, previousLocation);
-                context.put(PAGE_LOCATION_RETURN_PAGE, previousReturnPage);
+                if (isGroup) {
+                    // TODO review
+                    // Prepare to create the group destination pages
+                    currentPage = context.get(PAGE_NUM);
+                    currentY = context.get(PAGE_Y);
+                    currentObjId = context.get(PAGE_OBJ_ID);
+                    previousLocation = context.get(PAGE_LOCATION);
+                    previousReturnPage = context.get(PAGE_LOCATION_RETURN_PAGE);
+                    nextGroupPage = context.getOrDefault("nextGroupPage", "");
+
+                    // context.put(PREVIOUS_PAGE_NUM, currentPage);
+                    context.put(PAGE_NUM, nextGroupPage);
+                    // context.put(PAGE_Y, "0");
+                    // context.put(PAGE_OBJ_ID, "0");
+                    String widgetLabel;
+                    widgetLabel = "Group";
+                    // = getWidgetLabel(w, itemState);
+                    logger.trace("GROUP!! item: {} label:{}", itemName, widgetLabel);
+                    context.put(PAGE_LOCATION, widgetLabel);
+                    context.put(PAGE_LOCATION_RETURN_PAGE, currentPage);
+
+                    newPage(objectArray);
+                    isGroup = true;
+
+                    // objectArray.addAll(Arrays.asList(OpenHASPLayout.addSection(context)));
+
+                    // TODO If there is a recursive group we run into problems, should process
+                    // groups later
+                    int next = Integer.parseInt(nextGroupPage) + 5;
+                    context.put("nextGroupPage", Integer.toString(next));
+                    processWidgetList(((LinkableWidget) w).getChildren());
+
+                    // int endPage = Integer.parseInt(context.getOrDefault(OpenHASPLayout.PAGE_NUM,
+                    // "0")) + 1;
+                    // context.put("nextGroupPage", Integer.toString(endPage));
+
+                    context.put(PAGE_NUM, currentPage);
+                    context.put(PAGE_Y, currentY);
+                    context.put(PAGE_OBJ_ID, currentObjId);
+                    context.put(PAGE_LOCATION, previousLocation);
+                    context.put(PAGE_LOCATION_RETURN_PAGE, previousReturnPage);
+                }
             }
 
             if (w instanceof LinkableWidget && !isGroup) { // TODO review this
@@ -367,95 +426,20 @@ public class OpenHASPLayoutManager {
         }
     }
 
-    private int getItemStateIntVal(State itemState) {
-        int intVal = 0;
-        if (itemState != null) {
-            if (itemState instanceof DecimalType) {
-                intVal = ((DecimalType) itemState).intValue();
-            } else if (itemState instanceof QuantityType) {
-                intVal = ((QuantityType<?>) itemState).intValue();
-            } else {
-                logger.trace("Selection item came with unexpected state {}", itemState.getClass().getSimpleName());
-            }
-        }
-        return intVal;
-    }
-
-    private double getItemStateDoubletVal(State itemState) {
-        double doubleVal = 0;
-        if (itemState != null) {
-            if (itemState instanceof DecimalType) {
-                doubleVal = ((DecimalType) itemState).doubleValue();
-            } else if (itemState instanceof QuantityType) {
-                doubleVal = ((QuantityType<?>) itemState).doubleValue();
-            } else {
-                logger.trace("Selection item came with unexpected state {}", itemState.getClass().getSimpleName());
-            }
-        }
-        return doubleVal;
-    }
-
     public void newPage(ArrayList<String> objectArray) {
         int currentPage = getAsInt(context, PAGE_NUM);
         context.put(PREVIOUS_PAGE_NUM, Integer.toString(currentPage));
         context.put(PAGE_NUM, Integer.toString(currentPage + 1));
         context.put(PAGE_Y, "0");
         context.put(PAGE_OBJ_ID, "0");
-        ObjItemMapping mapping = layout.addComponent("page", objectArray);
-        if (mapping != null) {
-            objItemMapper.mapObj(mapping);
-        }
-    }
+        PageWidget page = new PageWidget(context); // TODO maybne change to something like getInit()
 
-    private String getWidgetLabel(Widget w, State itemState) {
-        String label;
-        Item item = itemRegistry.get(w.getItem());
-
-        label = w.getLabel();
-        // logger.trace("label1:{}", label);
-        if (label == null || label.isEmpty()) {
-            if (item != null) {
-                label = item.getLabel();
-            }
-        }
-        if (label == null || label.isEmpty()) {
-            label = w.getItem();
-        }
-
-        if (label != null) {
-            String statePattern = null;
-            int start = label.indexOf("[");
-
-            if (label.indexOf("[") >= 0) {
-                int end = label.indexOf("]");
-                if (end > start) {
-                    statePattern = label.substring(start + 1, end).trim();
-                } else {
-                    statePattern = label.substring(start + 1).trim();
-                }
-
-                label = label.substring(0, start).trim();
-            }
-
-            if (statePattern == null && item != null) {
-                @Nullable
-                StateDescription stateDescription = item.getStateDescription();
-                if (stateDescription != null) {
-                    statePattern = stateDescription.getPattern();
-                }
-            }
-
-            if (statePattern != null && itemState != null && !(itemState instanceof UnDefType)) {
-                logger.trace("Formating widget {}, itemState {}, itemStateClass {}, label {}, pattern {}, resultado {}",
-                        w, itemState, itemState.getClass().getSimpleName(), label, statePattern,
-                        itemState.format(statePattern));
-                label = label + " " + itemState.format(statePattern);
-            }
-
-            return label;
-        } else {
-            return "NULL";
-        }
+        layout.addComponent(page, objectArray);
+        // ObjItemMapping mapping = layout.addComponent(page, objectArray);
+        // if (mapping != null) {
+        // objItemMapper.mapObj(mapping);
+        // }
+        context.put("isBlankPage", "1");
     }
 
     public void sendPages() {
@@ -463,22 +447,7 @@ public class OpenHASPLayoutManager {
         logger.info("Sending pages to {}", plateId);
 
         int LimitDeviceJsonl = 500;
-        int LimitObjectJsonl = 230;
-        int StartSizeObjectJsonl;
-        int currentID = 0;
-        int currentPage = 0;
-        String currentObj = "";
-
         String jsonlString = "";
-        // var String attribute
-        // var z = -1
-        // var y = -1
-
-        int objectCount = objectArray.size();
-
-        int pageToClear = -1;
-
-        // logger.info("Objects: {}", objectCount);
 
         // TODO move this to some general setup method
         // TODO This with real plate, does no work with emulator
@@ -491,105 +460,18 @@ public class OpenHASPLayoutManager {
                 comm.sendHASPCommand(CommandType.CMD, "clearpage=" + String.valueOf(pageNum));
                 if (page != null) {
                     for (String object : page) {
-
-                        // for (String object : objectArray) {
                         object = object.trim();
                         if (object.isEmpty()) {
                             continue;
                         }
-
-                        // OLD MODE
-                        // int startIndex = 0;
-                        // if (object.startsWith("{")) {
-                        // startIndex = 1;
-                        // }
-
-                        // if (object.endsWith("}")) {
-                        // object = object.substring(startIndex, object.length() - 1);
-                        // } else {
-                        // object = object.substring(startIndex);
-                        // }
-
-                        // String[] attributes = object.split(",");
-                        // // logger.info("Sending: {}", object);
-                        // // logger.info("Attributes: {}", attributes.length);
-
-                        // StartSizeObjectJsonl = jsonlString.length();
-                        // jsonlString += "{";
-
-                        // boolean firstAttribute = true;
-                        // for (String attribute : attributes) {
-                        // // logger.info("Sending to {} attribute [{}]", plateId, attribute);
-
-                        // if (firstAttribute) {
-                        // firstAttribute = false;
-                        // } else {
-                        // jsonlString += ",";
-                        // }
-
-                        // // String[] fields = attribute.split("=");
-                        // String[] fields = attribute.split(":");
-                        // fields[0] = Util.cleanString(fields[0]);
-                        // if (fields.length >= 2) {
-                        // fields[1] = Util.cleanString(fields[1]);
-                        // } else {
-                        // fields = new String[] { fields[0], "" };
-                        // }
-
-                        // if (fields[0].equalsIgnoreCase("page")) {
-                        // currentPage = Integer.parseInt(fields[1]);
-                        // }
-                        // if (fields[0].equalsIgnoreCase("id")) {
-                        // currentID = Integer.parseInt(fields[1]);
-                        // }
-                        // if (fields[0].equalsIgnoreCase("obj")) {
-                        // currentObj = fields[1];
-                        // }
-
-                        // // Send Clearpage and set bg color when refreshing the lcd
-
-                        // if (pageToClear < currentPage) { // < prevents clearing when returning from a groups
-                        // comm.sendHASPCommand(CommandType.CMD, "clearpage=" + String.valueOf(currentPage));
-                        // // connection.publish(plateBaseTopic + "/command/clearpage",
-                        // // String.valueOf(currentPage).getBytes(), 1, true);// .get();
-
-                        // // logger.info("[{}] ClearPage: {}", plateId, currentPage);
-                        // pageToClear = currentPage;
-                        // }
-
-                        // jsonlString += "\"" + fields[0] + "\":";
-                        // try {
-                        // int num = Integer.parseInt(fields[1]);
-                        // jsonlString += num;
-                        // } catch (NumberFormatException e) {
-                        // jsonlString += "\"" + fields[1] + "\"";
-                        // }
-
-                        // if (LimitObjectJsonl < (jsonlString.length() - StartSizeObjectJsonl)) {
-                        // jsonlString += "}\n";
-                        // StartSizeObjectJsonl = jsonlString.length();
-                        // jsonlString += "{\"page\":" + currentPage + ",\"id\":" + currentID;
-                        // }
-                        // }
-                        // jsonlString += "}\n";
-
                         // NEW MODE
-
                         jsonlString += object;
                         jsonlString += "\n";
 
-                        // logger.info("[{}] JSONL Size={}", plateId, jsonlString.length());
                         if (LimitDeviceJsonl < jsonlString.length()) {
-                            // logger.info("[{}] JSONL={}", jsonlString, jsonlString);
-
                             comm.sendHASPCommand(CommandType.JSONL, jsonlString);
-                            // connection.publish(plateBaseTopic + "/command/jsonl", jsonlString.getBytes(),
-                            // 1, true);
                             jsonlString = "";
                         }
-                        // if ("btn".equals(currentObj)) {
-                        // logger.trace("Button: p{}b{}", currentPage, currentID);
-                        // }
                     }
                     // Flush before changing page
                     if (jsonlString.length() > 0) {
@@ -606,11 +488,11 @@ public class OpenHASPLayoutManager {
         logger.info("Send page {} DONE", plateId);
     }
 
-    public @Nullable List<ObjItemMapping> getByItem(@NonNull String item) {
+    public @Nullable List<IObjItemMapping> getByItem(@NonNull String item) {
         return objItemMapper.getByItem(item);
     }
 
-    public @Nullable ObjItemMapping getByObject(@NonNull String object) {
+    public @Nullable IObjItemMapping getByObject(@NonNull String object) {
         return objItemMapper.getByObject(object);
     }
 
@@ -624,5 +506,77 @@ public class OpenHASPLayoutManager {
 
     public ObjItemMapper getObjItemMapper() {
         return objItemMapper;
+    }
+
+    /**
+     * Updates the state of all the widgets in this plate
+     * This only changes the state of the widget internally, it won't send it to the plate.
+     */
+    public void updateAllStates() {
+        HashMap<String, IObjItemMapping> allByObject = getObjItemMapper().getAllByObject();
+        Set<Entry<String, IObjItemMapping>> entrySet = allByObject.entrySet();
+        for (Entry<String, IObjItemMapping> entry : entrySet) {
+            IObjItemMapping mapping = entry.getValue();
+            refreshMapping(mapping);
+        }
+    }
+
+    /**
+     * Updates the state of all the widgets mapped to the item.
+     * This only changes the state of the widget internally, it won't send it to the plate.
+     */
+    public void processItemStateEvent(Event event) {
+        List<IObjItemMapping> mappingList = getByItem(((ItemEvent) event).getItemName());
+        if (mappingList != null) {
+            for (IObjItemMapping mapping : mappingList) {
+                refreshMapping(mapping);
+            }
+        }
+    }
+
+    public void refreshMapping(IObjItemMapping mapping) {
+        logger.trace("Updating HASP {}", mapping);
+        mapping.updateState();
+        if (mapping instanceof IComponent) {
+            IComponent comp = (IComponent) mapping;
+            layout.sendStatusUpdate(comp, pendingCommands);
+        }
+    }
+
+    public void sendPendingCommands() {
+        // connection.publish(fullCommandTopic + "/LWT", payload, qos, retain);
+        logger.info("Sending {} pending commands to {}", pendingCommands.size(), plateId);
+
+        comm.sendHASPCommand(CommandType.JSON, pendingCommands);
+        pendingCommands.clear();
+
+        /*
+         * int LimitDeviceJsonl = 500;
+         * String jsonlString = "";
+         * 
+         * try {
+         * for (String cmd : pendingCommands) {
+         * cmd = cmd.trim();
+         * if (cmd.isEmpty()) {
+         * continue;
+         * }
+         * jsonlString += cmd;
+         * jsonlString += "\n";
+         * 
+         * if (LimitDeviceJsonl < jsonlString.length()) {
+         * logger.info("{}", jsonlString);
+         * comm.sendHASPCommand(CommandType.JSON, jsonlString);
+         * jsonlString = "";
+         * }
+         * }
+         * if (jsonlString.length() > 0) {
+         * logger.info("{}", jsonlString);
+         * comm.sendHASPCommand(CommandType.JSON, jsonlString);
+         * }
+         * } catch (RuntimeException e) {
+         * logger.error("Error sending pending commands", e);
+         * }
+         */
+        logger.info("Send pending commands {} DONE", plateId);
     }
 }

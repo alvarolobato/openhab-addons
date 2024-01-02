@@ -108,7 +108,7 @@ public class OpenHASPThingHandler extends AbstractMQTTThingHandler implements Mq
 
             OpenHASPCommunicationManager comm = new OpenHASPCommunicationManager(plateId, connection);
             this.comm = comm;
-            layoutManager = new OpenHASPLayoutManager(thingId, plateId, comm, itemRegistry);
+            layoutManager = new OpenHASPLayoutManager(thingId, plateId, comm, config, itemRegistry);
 
             if (plate != null) {
                 logger.error("############ There was already a plate object"); // TODO CHECK THIS CASE

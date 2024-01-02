@@ -1,21 +1,12 @@
-//Container object
-{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"obj","x":"5","y":{{y}},"w":"310","h":"{{slider_height}}","radius":"15","click":"false","border_side":"0","bg_color":"{{section_bgcolor}}","bg_grad_dir":"0"}
-
-//Container that doesn't include the slider for the click even
-{{clickObj}}{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"obj","x":"5","y":{{y}},"w":"310","h":"68","radius":"15","click":"true","border_side":"0","bg_color":"{{section_bgcolor}}","bg_grad_dir":"0"}
-
-//Icon background circle
-{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"obj","x":"15","y":{{math y '+' 5}},"w":"65","h":"65","radius":"35","click":"false","border_side":"0", "bg_color":"{{icon_bgcolor}}"}
+//Container Object
+{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"obj","x":"5","y":"{{y}}","w":"310","h":"{{slider_height}}","radius":"15","click":"true","border_side":"0","bg_color":"{{item_bgcolor}}","bg_grad_dir":"0"}
         
 //Icon
-{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"label","x":"15","y":{{math y '+' 10}},"w":"65","h":"65","text":"\uE6B5","text_font":"48","text_color":"{{icon_color}}","align":"center"}
+{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"label","x":"10","y":{{math y '+' 5}},"w":"30","h":"30","text":"\uE769","text_font":"64","text_color":"{{icon_color}}","align":"center","click":"false"}
 
-//Label
-{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"label","x":"100","y":{{math y '+' 10}},"w":"200","h":"40","text":"{{widgetLabel}}","text_font":"24","mode":"scroll"}
-
-//Label status
-{{statusLabel}}{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"label","x":"100","y":{{math y '+' 40}},"w":"200","h":"40","text":"On","text_font":"16","text_color":"{{text_sub_color}}"}
+//Label name
+{{objId "label"}}{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"label","x":"45","y":{{math y '+' 5}},"w":"260","h":"{{text_height}}","text":"{{widgetLabel}}","mode":"scroll","text_font":"{{text_fontsize}}","click":"false"}
         
 //Slider
-{{sliderObj}}{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"slider","x":"25", "y":{{math y '+' 80}},"w":"270","h":"15","min":"0","max":"100"}
+{{objId "slide"}}{{sliderObj}}{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"slider","x":"20", "y":{{math y '+' 40}},"w":"280","h":"20","min":"0","max":"100", "radius":"20", "radius20":"20","bg_grad_color10":"{{control_highlight_bgcolor}}","bg_color10":"{{control_highlight_bgcolor}}"}
 

@@ -1,13 +1,18 @@
 package org.openhab.binding.openhasp.internal.layout;
 
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 import org.openhab.binding.openhasp.internal.layout.handlebars.AssignHelper;
 import org.openhab.binding.openhasp.internal.layout.handlebars.ClickObjectHelper;
 import org.openhab.binding.openhasp.internal.layout.handlebars.IncHelper;
 import org.openhab.binding.openhasp.internal.layout.handlebars.MathHelper;
+import org.openhab.binding.openhasp.internal.layout.handlebars.ObjectIdHelper;
 import org.openhab.binding.openhasp.internal.layout.handlebars.SliderObjectHelper;
 import org.openhab.binding.openhasp.internal.layout.handlebars.StatusLabelHelper;
 import org.openhab.binding.openhasp.internal.layout.handlebars.ToIntHelper;
@@ -18,6 +23,9 @@ import com.github.jknack.handlebars.Handlebars;
 import com.github.jknack.handlebars.Template;
 import com.github.jknack.handlebars.helper.ConditionalHelpers;
 import com.github.jknack.handlebars.helper.IfHelper;
+import com.github.jknack.handlebars.io.ClassPathTemplateLoader;
+import com.github.jknack.handlebars.io.FileTemplateLoader;
+import com.github.jknack.handlebars.io.URLTemplateLoader;
 
 //Handles sending all the layout to the HASP device
 
@@ -28,12 +36,30 @@ public class TemplateProcessor {
     // private MustacheFactory mustacheFactory;
     Handlebars handlebars;
 
-    public TemplateProcessor() {
+    URLTemplateLoader templateLoader;
+    private boolean templatePathFileType1;
+    private String templatePath1;
+
+    /**
+     * 
+     * @param templatePath the path to load from
+     * @param templatePathFileType if true will load from file, otherwhise from classpath
+     */
+    public TemplateProcessor(String templatePath1, boolean templatePathFileType1) {
         // Create a MustacheFactory
         // mustacheFactory = new DefaultMustacheFactory();
 
+        this.templatePathFileType1 = templatePathFileType1;
+        this.templatePath1 = templatePath1;
+
+        if (templatePathFileType1) {
+            templateLoader = new FileTemplateLoader(templatePath1);
+        } else {
+            templateLoader = new ClassPathTemplateLoader(templatePath1);
+        }
+
         // Create a Handlebars instance
-        handlebars = new Handlebars();
+        handlebars = new Handlebars(templateLoader);
         handlebars.registerHelper(IfHelper.NAME, IfHelper.INSTANCE);
         for (ConditionalHelpers helper : ConditionalHelpers.values()) {
             this.handlebars.registerHelper(helper.name(), helper);
@@ -43,11 +69,20 @@ public class TemplateProcessor {
         handlebars.registerHelper(ToIntHelper.NAME, ToIntHelper.INSTANCE);
         handlebars.registerHelper(ClickObjectHelper.NAME, ClickObjectHelper.INSTANCE);
         handlebars.registerHelper(SliderObjectHelper.NAME, SliderObjectHelper.INSTANCE);
+        handlebars.registerHelper(ObjectIdHelper.NAME, ObjectIdHelper.INSTANCE);
         handlebars.registerHelper("statusLabel", new StatusLabelHelper());
         handlebars.registerHelper(AssignHelper.NAME, AssignHelper.INSTANCE);
     }
 
-    public String[] processTemplate(String name, Map<String, String> context) throws IOException {
+    public InputStream getResourceAsStream(String resource) throws FileNotFoundException {
+        if (templatePathFileType1) {
+            return new FileInputStream(templatePath1 + resource);
+        } else {
+            return this.getClass().getResourceAsStream(templatePath1 + resource);
+        }
+    }
+
+    public List<String> processTemplate(String name, Map<String, String> context) throws IOException {
 
         // Create a data context with the variables
         // Handlebars.Context context = com.github.jknack.handlebars.Context.newBuilder(new Object())
@@ -80,7 +115,7 @@ public class TemplateProcessor {
         }
         for (String line : lines) {
             line = line.trim();
-            if (line.startsWith("{")) {
+            if (!line.startsWith("//")) {
                 cleanLines.add(line);
                 logger.trace(line);
             } else {
@@ -97,6 +132,6 @@ public class TemplateProcessor {
 
         // logger.trace(writer.toString());
 
-        return cleanLines.toArray(new String[cleanLines.size()]);
+        return cleanLines;
     }
 }
