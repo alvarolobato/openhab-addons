@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2010-2022 Contributors to the openHAB project
+ * Copyright (c) 2010-2024 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -20,10 +20,10 @@ import java.net.URI;
 import java.time.format.DateTimeFormatter;
 import java.time.format.FormatStyle;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
@@ -84,10 +84,10 @@ import org.slf4j.LoggerFactory;
 /**
  * The {@link LivisiBridgeHandler} is responsible for handling the LIVISI SmartHome controller including the connection
  * to the LIVISI SmartHome backend for all communications with the LIVISI SmartHome {@link DeviceDTO}s.
- * <p/>
+ * <p>
  * It implements the {@link AccessTokenRefreshListener} to handle updates of the oauth2 tokens and the
  * {@link EventListener} to handle {@link EventDTO}s, that are received by the {@link LivisiWebSocket}.
- * <p/>
+ * <p>
  * The {@link DeviceDTO}s are organized by the {@link DeviceStructureManager}, which is also responsible for the
  * connection
  * to the LIVISI SmartHome webservice via the {@link LivisiClient}.
@@ -103,7 +103,7 @@ public class LivisiBridgeHandler extends BaseBridgeHandler
     private final Logger logger = LoggerFactory.getLogger(LivisiBridgeHandler.class);
     private final GsonOptional gson = new GsonOptional();
     private final Object lock = new Object();
-    private final Map<String, DeviceStatusListener> deviceStatusListeners;
+    private final Map<String, DeviceStatusListener> deviceStatusListeners = new ConcurrentHashMap<>();
     private final OAuthFactory oAuthFactory;
     private final HttpClient httpClient;
 
@@ -114,7 +114,7 @@ public class LivisiBridgeHandler extends BaseBridgeHandler
     private @Nullable ScheduledFuture<?> reInitJob;
     private @Nullable ScheduledFuture<?> bridgeRefreshJob;
     private @NonNullByDefault({}) LivisiBridgeConfiguration bridgeConfiguration;
-    private @NonNullByDefault({}) OAuthClientService oAuthService;
+    private @Nullable OAuthClientService oAuthService;
     private String configVersion = "";
 
     /**
@@ -128,7 +128,6 @@ public class LivisiBridgeHandler extends BaseBridgeHandler
         super(bridge);
         this.oAuthFactory = oAuthFactory;
         this.httpClient = httpClient;
-        deviceStatusListeners = new ConcurrentHashMap<>();
     }
 
     @Override
@@ -138,7 +137,7 @@ public class LivisiBridgeHandler extends BaseBridgeHandler
 
     @Override
     public Collection<Class<? extends ThingHandlerService>> getServices() {
-        return Collections.singleton(LivisiDeviceDiscoveryService.class);
+        return Set.of(LivisiDeviceDiscoveryService.class);
     }
 
     @Override
@@ -154,8 +153,9 @@ public class LivisiBridgeHandler extends BaseBridgeHandler
      */
     private void initializeClient() {
         String tokenURL = URLCreator.createTokenURL(bridgeConfiguration.host);
-        oAuthService = oAuthFactory.createOAuthClientService(thing.getUID().getAsString(), tokenURL, tokenURL,
-                "clientId", "clientPass", null, true);
+        OAuthClientService oAuthService = oAuthFactory.createOAuthClientService(thing.getUID().getAsString(), tokenURL,
+                tokenURL, "clientId", "clientPass", null, true);
+        this.oAuthService = oAuthService;
         client = createClient(oAuthService);
         deviceStructMan = new DeviceStructureManager(createFullDeviceManager(client));
         oAuthService.addAccessTokenRefreshListener(this);
@@ -350,11 +350,23 @@ public class LivisiBridgeHandler extends BaseBridgeHandler
         unregisterDeviceStatusListener(bridgeId);
         cancelJobs();
         stopWebSocket();
+        OAuthClientService oAuthService = this.oAuthService;
+        if (oAuthService != null) {
+            oAuthService.removeAccessTokenRefreshListener(this);
+            oAuthFactory.ungetOAuthService(thing.getUID().getAsString());
+            this.oAuthService = null;
+        }
         client = null;
         deviceStructMan = null;
 
         super.dispose();
         logger.debug("LIVISI SmartHome bridge handler shut down.");
+    }
+
+    @Override
+    public void handleRemoval() {
+        oAuthFactory.deleteServiceAndAccessToken(thing.getUID().getAsString());
+        super.handleRemoval();
     }
 
     private synchronized void cancelJobs() {
@@ -552,8 +564,8 @@ public class LivisiBridgeHandler extends BaseBridgeHandler
 
     @Override
     public void onError(final Throwable cause) {
-        if (cause instanceof Exception) {
-            handleClientException((Exception) cause);
+        if (cause instanceof Exception exception) {
+            handleClientException(exception);
         }
     }
 
@@ -564,7 +576,6 @@ public class LivisiBridgeHandler extends BaseBridgeHandler
      * @param event event
      */
     private void handleStateChangedEvent(final EventDTO event) throws IOException {
-
         // CAPABILITY
         if (event.isLinkedtoCapability()) {
             logger.trace("Event is linked to capability");
@@ -596,7 +607,6 @@ public class LivisiBridgeHandler extends BaseBridgeHandler
      * @param event event
      */
     private void handleControllerConnectivityChangedEvent(final EventDTO event) throws IOException {
-
         final Boolean connected = event.getIsConnected();
         if (connected != null) {
             final ThingStatus thingStatus;
@@ -621,7 +631,6 @@ public class LivisiBridgeHandler extends BaseBridgeHandler
      * @param event event
      */
     private void handleNewMessageReceivedEvent(final MessageEventDTO event) throws IOException {
-
         final MessageDTO message = event.getMessage();
         if (logger.isTraceEnabled()) {
             logger.trace("Message: {}", gson.toJson(message));
@@ -645,7 +654,6 @@ public class LivisiBridgeHandler extends BaseBridgeHandler
      * @param event event
      */
     private void handleMessageDeletedEvent(final EventDTO event) throws IOException {
-
         final String messageId = event.getData().getId();
         logger.debug("handleMessageDeletedEvent with messageId '{}'", messageId);
 
@@ -719,7 +727,7 @@ public class LivisiBridgeHandler extends BaseBridgeHandler
                         (capabilityId) -> client.setVariableActuatorState(capabilityId, state));
                 // PSS / PSSO / ISS2 / BT-PSS
             } else if (DEVICE_PSS.equals(deviceType) || DEVICE_PSSO.equals(deviceType) || DEVICE_ISS2.equals(deviceType)
-                    || DEVICE_BT_PSS.equals((deviceType))) {
+                    || DEVICE_BT_PSS.equals(deviceType)) {
                 executeCommand(deviceId, CapabilityDTO.TYPE_SWITCHACTUATOR,
                         (capabilityId) -> client.setSwitchActuatorState(capabilityId, state));
             }
@@ -751,6 +759,18 @@ public class LivisiBridgeHandler extends BaseBridgeHandler
     public void commandSwitchAlarm(final String deviceId, final boolean alarmState) {
         executeCommand(deviceId, CapabilityDTO.TYPE_ALARMACTUATOR,
                 (capabilityId) -> client.setAlarmActuatorState(capabilityId, alarmState));
+    }
+
+    /**
+     * Sends the command to turn the siren of the {@link DeviceDTO} with the given id on or off. Is called by the
+     * {@link LivisiDeviceHandler} for siren {@link DeviceDTO}s like SIR.
+     *
+     * @param deviceId device id
+     * @param sirenState siren state (boolean)
+     */
+    public void commandSwitchSiren(final String deviceId, final String sirenState) {
+        executeCommand(deviceId, CapabilityDTO.TYPE_SIRENACTUATOR,
+                (capabilityId) -> client.setSirenActuatorState(capabilityId, sirenState));
     }
 
     /**
@@ -889,6 +909,10 @@ public class LivisiBridgeHandler extends BaseBridgeHandler
     }
 
     private void requestAccessToken() throws OAuthException, IOException, OAuthResponseException {
+        OAuthClientService oAuthService = this.oAuthService;
+        if (oAuthService == null) {
+            throw new OAuthException("OAuth service is not initialized");
+        }
         oAuthService.getAccessTokenByResourceOwnerPasswordCredentials(LivisiBindingConstants.USERNAME,
                 bridgeConfiguration.password, null);
     }

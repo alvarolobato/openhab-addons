@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2010-2022 Contributors to the openHAB project
+ * Copyright (c) 2010-2024 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -47,11 +47,13 @@ public class TACmiBindingConstants {
             "schema-switch-ro");
     public static final ChannelTypeUID CHANNEL_TYPE_SCHEME_SWITCH_RW_UID = new ChannelTypeUID(BINDING_ID,
             "schema-switch-rw");
+    public static final ChannelTypeUID CHANNEL_TYPE_SCHEME_DATE_TIME_RO_UID = new ChannelTypeUID(BINDING_ID,
+            "schema-date-time-ro");
     public static final ChannelTypeUID CHANNEL_TYPE_SCHEME_NUMERIC_RO_UID = new ChannelTypeUID(BINDING_ID,
             "schema-numeric-ro");
     public static final ChannelTypeUID CHANNEL_TYPE_SCHEME_STATE_RO_UID = new ChannelTypeUID(BINDING_ID,
             "schema-state-ro");
 
     // Channel specific configuration items
-    public final static String CHANNEL_CONFIG_OUTPUT = "output";
+    public static final String CHANNEL_CONFIG_OUTPUT = "output";
 }

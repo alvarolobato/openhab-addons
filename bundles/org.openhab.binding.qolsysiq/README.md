@@ -4,9 +4,9 @@ This binding directly controls a [Qolsys IQ](https://qolsys.com/security/) secur
 This allows for local monitoring of alarm and zone statuses as well as arming, disarming and triggering alarms.
 
 Qolsys (a division of Johnson Controls) is a popular manufacturer of alarm systems.
-The Qolsys IQ line of panels supports both wireless and hard wire sensors and features built in Cellular and Wi-Fi dual path communication that natively integrates with Alarm.com monitoring and supervision. 
+The Qolsys IQ line of panels supports both wireless and hard wire sensors and features built in Cellular and Wi-Fi dual path communication that natively integrates with Alarm.com monitoring and supervision.
 
-This binding directly interfaces with the panel and does not require cloud access. 
+This binding directly interfaces with the panel and does not require cloud access.
 
 ![Qolsys IQ 4](doc/qolsysiq4.png)
 
@@ -29,11 +29,11 @@ To enable 3rd party control and retrieve the access token follow the following s
 
 `Settings` --> `Advanced Settings` --> `Installation` --> `Devices` --> `Wi-Fi Devices` --> `Control4` (set to enabled)
 
- *Panel will reboot*
+Panel will _reboot_
 
 `Settings` --> `Advanced Settings` --> `Installation` --> `Devices` --> `Wi-Fi Devices` --> `Reveal Secure Token` (copy token to use in panel configuration)
 
-At this point you may add the panel thing in openHAB using the secure token along with the IP or host name of the panel.  
+At this point you may add the panel thing in openHAB using the secure token along with the IP or host name of the panel.
 
 ### Partition (Bridge)
 
@@ -84,7 +84,7 @@ None.
 
 ### Zone Channels
 
-| Channel | Type    | Read/Write | Description            | State Options                               | 
+| Channel | Type    | Read/Write | Description            | State Options                               |
 |---------|---------|------------|------------------------|---------------------------------------------|
 | status  | String  | R          | The zone status        | ACTIVE, CLOSED, OPEN, FAILURE, IDLE, TAMPER |
 | state   | Number  | R          | The zone state         | Number                                      |
@@ -94,7 +94,7 @@ None.
 
 ### qolsysiq.things
 
-```
+```java
 Bridge qolsysiq:panel:home "Home Security Panel" [ hostname="192.168.3.123", port=12345, key="AAABBB00" ] {
     Bridge partition 0 "Partition Main" [ id=0, armCode="123456" ] {
         Thing zone 1 "Window" [ id=1 ]
@@ -107,7 +107,7 @@ Bridge qolsysiq:panel:home "Home Security Panel" [ hostname="192.168.3.123", por
 
 Sample items file with both Alexa and Homekit voice control
 
-```
+```java
 Group      PartitionMain                         "Alarm System"                                                           ["Equipment"]    {alexa="SecurityPanel", homekit = "SecuritySystem"}
 String     PartitionMain_PartitionArmState       "Partition Arm State"                <Alarm>    (PartitionMain)          ["Point"]        {channel="qolsysiq:partition:home:0:armState", alexa="ArmState" [DISARMED="DISARM",ARMED_STAY="ARM_STAY",ARMED_AWAY="ARM_AWAY:EXIT_DELAY"], homekit = "SecuritySystem.CurrentSecuritySystemState,SecuritySystem.TargetSecuritySystemState" [STAY_ARM="ARM_STAY", AWAY_ARM="ARM_AWAY", DISARM="DISARM", DISARMED="DISARM", TRIGGERED="ALARM"]}
 String     PartitionMain_PartitionAlarmState     "Partition Alarm State"              <Alarm>    (PartitionMain)          ["Point"]        {channel="qolsysiq:partition:home:0:alarmState"}
@@ -121,5 +121,5 @@ Contact    ZoneKitchenWindows_ZoneContact        "Kitchen Windows Zone Contact" 
 
 Group      ZoneMotionDetector1                   "Motion Detector 1"                                                      ["Equipment"]
 Number     ZoneMotionDetector_ZoneState1         "Motion Detector 1 Zone State"                  (ZoneMotionDetector1)    ["Point"]        {channel="qolsysiq:zone:home:0:2:state"}
-String     ZoneMotionDetector_ZoneStatus1        "Motion Detector 1 Zone Status"                 (ZoneMotionDetector1)    ["Point"]        {channel="qolsysiq:zone:home:0:2:status"} 
+String     ZoneMotionDetector_ZoneStatus1        "Motion Detector 1 Zone Status"                 (ZoneMotionDetector1)    ["Point"]        {channel="qolsysiq:zone:home:0:2:status"}
 ```

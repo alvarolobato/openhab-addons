@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2010-2022 Contributors to the openHAB project
+ * Copyright (c) 2010-2024 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -18,9 +18,9 @@ import static org.openhab.binding.livisismarthome.internal.LivisiBindingConstant
 import static org.openhab.binding.livisismarthome.internal.client.api.entity.link.LinkDTO.LINK_TYPE_DEVICE;
 
 import java.io.IOException;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -198,7 +198,7 @@ public class LivisiBridgeHandlerTest {
     }
 
     @Test
-    public void testOnDeviceStateChanged_SHC_Classic() {
+    public void testOnDeviceStateChangedSHCClassic() {
         DeviceDTO bridgeDevice = createBridgeDevice(true);
 
         StateDTO state = new StateDTO();
@@ -220,7 +220,7 @@ public class LivisiBridgeHandlerTest {
     }
 
     @Test
-    public void testOnDeviceStateChanged_SHCA() {
+    public void testOnDeviceStateChangedSHCA() {
         DeviceDTO bridgeDevice = createBridgeDevice(false);
 
         StateDTO state = new StateDTO();
@@ -242,7 +242,7 @@ public class LivisiBridgeHandlerTest {
     }
 
     @Test
-    public void testOnDeviceStateChanged_Event_SHC_Classic() {
+    public void testOnDeviceStateChangedEventSHCClassic() {
         DeviceDTO bridgeDevice = createBridgeDevice(true);
 
         // Example SHC-Classic-Event
@@ -276,7 +276,7 @@ public class LivisiBridgeHandlerTest {
     }
 
     @Test
-    public void testOnDeviceStateChanged_Event_SHCA() {
+    public void testOnDeviceStateChangedEventSHCA() {
         DeviceDTO bridgeDevice = createBridgeDevice(false);
 
         EventDTO event = createDeviceEvent(c -> {
@@ -363,7 +363,7 @@ public class LivisiBridgeHandlerTest {
 
             livisiClientMock = mock(LivisiClient.class);
             fullDeviceManagerMock = mock(FullDeviceManager.class);
-            when(fullDeviceManagerMock.getFullDevices()).thenReturn(Collections.singletonList(bridgeDevice));
+            when(fullDeviceManagerMock.getFullDevices()).thenReturn(List.of(bridgeDevice));
 
             schedulerMock = mock(ScheduledExecutorService.class);
 

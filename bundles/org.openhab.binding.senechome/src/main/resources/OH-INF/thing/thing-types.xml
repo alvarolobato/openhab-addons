@@ -32,6 +32,7 @@
 			<channel id="batteryFuelCharge" typeId="batteryFuelCharge"/>
 			<channel id="systemState" typeId="systemState"/>
 			<channel id="systemStateValue" typeId="systemStateValue"/>
+			<channel id="chargeMode" typeId="chargeMode"/>
 
 			<!-- SenecHomeGrid -->
 			<channel id="gridPower" typeId="gridPower"/>
@@ -47,15 +48,6 @@
 			<channel id="gridVoltagePhase2" typeId="gridVoltagePhase2"/>
 			<channel id="gridVoltagePhase3" typeId="gridVoltagePhase3"/>
 			<channel id="gridFrequency" typeId="gridFrequency"/>
-
-			<!-- SenecHomeStatistics -->
-			<channel id="liveBatCharge" typeId="liveBatCharge"/>
-			<channel id="liveBatDischarge" typeId="liveBatDischarge"/>
-			<channel id="liveGridImport" typeId="liveGridImport"/>
-			<channel id="liveGridExport" typeId="liveGridExport"/>
-			<channel id="liveHouseConsumption" typeId="liveHouseConsumption"/>
-			<channel id="livePowerGenerator" typeId="livePowerGenerator"/>
-			<channel id="liveEnergyWallbox1" typeId="liveEnergyWallbox1"/>
 
 			<!-- SenecHomeBattery -->
 			<channel id="chargedEnergyPack1" typeId="chargedEnergyPack1"/>
@@ -101,6 +93,10 @@
 			<channel id="wallbox1ChargingPower" typeId="wallbox1ChargingPower"/>
 		</channels>
 
+		<properties>
+			<property name="thingTypeVersion">1</property>
+		</properties>
+
 		<config-description>
 			<parameter name="hostname" type="text" required="true">
 				<label>Hostname/IP Address</label>
@@ -121,6 +117,11 @@
 				<label>Limitation Duration</label>
 				<description>Duration of stable values until state is changed, defined in seconds</description>
 				<default>120</default>
+			</parameter>
+			<parameter name="useHttp" type="boolean" required="false">
+				<label>Use HTTP</label>
+				<description>Use legacy http access instead of https</description>
+				<default>false</default>
 			</parameter>
 		</config-description>
 
@@ -241,6 +242,18 @@
 		<label>System State Value</label>
 		<category>Number</category>
 		<state readOnly="true" pattern="%d"/>
+	</channel-type>
+	<channel-type id="chargeMode">
+		<item-type>String</item-type>
+		<label>Safe Charge Mode</label>
+		<category>Text</category>
+		<state readOnly="false" pattern="%s">
+			<options>
+				<option value="OFF">Off</option>
+				<option value="CHARGE">Safe Charge</option>
+				<option value="STORAGE">Lithium Storage</option>
+			</options>
+		</state>
 	</channel-type>
 
 

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2010-2022 Contributors to the openHAB project
+ * Copyright (c) 2010-2024 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -25,6 +25,7 @@ import java.util.List;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.jupnp.model.ValidationException;
 import org.mockito.ArgumentCaptor;
@@ -68,6 +69,7 @@ public class WemoHandlerOSGiTest extends GenericWemoOSGiTest {
     }
 
     @Test
+    @Disabled("https://github.com/openhab/openhab-addons/issues/12474")
     public void assertThatThingHandlesOnOffCommandCorrectly()
             throws MalformedURLException, URISyntaxException, ValidationException, IOException {
         Command command = OnOffType.OFF;
@@ -104,6 +106,7 @@ public class WemoHandlerOSGiTest extends GenericWemoOSGiTest {
     }
 
     @Test
+    @Disabled("https://github.com/openhab/openhab-addons/issues/12474")
     public void assertThatThingHandlesREFRESHCommandCorrectly()
             throws MalformedURLException, URISyntaxException, ValidationException, IOException {
         Command command = RefreshType.REFRESH;
@@ -111,7 +114,7 @@ public class WemoHandlerOSGiTest extends GenericWemoOSGiTest {
         Thing thing = createThing(THING_TYPE_UID, DEFAULT_TEST_CHANNEL, DEFAULT_TEST_CHANNEL_TYPE);
 
         waitForAssert(() -> {
-            assertThat(thing.getStatus(), is(ThingStatus.OFFLINE));
+            assertThat(thing.getStatus(), is(ThingStatus.UNKNOWN));
         });
 
         // The device is registered as UPnP Device after the initialization, this will ensure that the polling job will

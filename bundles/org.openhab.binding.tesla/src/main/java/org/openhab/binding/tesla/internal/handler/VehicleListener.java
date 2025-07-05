@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2010-2022 Contributors to the openHAB project
+ * Copyright (c) 2010-2024 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -12,8 +12,10 @@
  */
 package org.openhab.binding.tesla.internal.handler;
 
-import org.openhab.binding.tesla.internal.protocol.Vehicle;
-import org.openhab.binding.tesla.internal.protocol.VehicleConfig;
+import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.tesla.internal.protocol.dto.Vehicle;
+import org.openhab.binding.tesla.internal.protocol.dto.VehicleConfig;
 
 /**
  * The {@link VehicleListener} interface can be implemented by classes that want to be informed about
@@ -21,12 +23,14 @@ import org.openhab.binding.tesla.internal.protocol.VehicleConfig;
  *
  * @author Kai Kreuzer - Initial contribution
  */
+@NonNullByDefault
 public interface VehicleListener {
 
     /**
      * This method is called by the {@link TeslaAccountHandler}, if a vehicle is identified.
      *
      * @param vehicle a vehicle that was found within an account.
+     * @param vehicleConfig vehicle configuration that was read from the vehicle or null, if not available.
      */
-    void vehicleFound(Vehicle vehicle, VehicleConfig vehicleConfig);
+    void vehicleFound(Vehicle vehicle, @Nullable VehicleConfig vehicleConfig);
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2010-2022 Contributors to the openHAB project
+ * Copyright (c) 2010-2024 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -33,8 +33,9 @@ import com.google.gson.annotations.SerializedName;
 @NonNullByDefault
 public abstract class AbstractChannelConfiguration {
     public static final char PARENT_TOPIC_PLACEHOLDER = '~';
+    private static final String DEFAULT_THING_NAME = "Home Assistant Device";
 
-    protected String name;
+    protected @Nullable String name;
 
     protected String icon = "";
     protected int qos; // defaults to 0 according to HA specification
@@ -55,11 +56,19 @@ public abstract class AbstractChannelConfiguration {
     @SerializedName("availability_template")
     protected @Nullable String availabilityTemplate;
 
+    @SerializedName("enabled_by_default")
+    protected boolean enabledByDefault = true;
+
     /**
      * A list of MQTT topics subscribed to receive availability (online/offline) updates. Must not be used together with
      * availability_topic
      */
     protected @Nullable List<Availability> availability;
+
+    @SerializedName("json_attributes_template")
+    protected @Nullable String jsonAttributesTemplate;
+    @SerializedName("json_attributes_topic")
+    protected @Nullable String jsonAttributesTopic;
 
     @SerializedName(value = "~")
     protected String parentTopic = "";
@@ -89,6 +98,9 @@ public abstract class AbstractChannelConfiguration {
         }
         if (result == null) {
             result = name;
+        }
+        if (result == null) {
+            result = DEFAULT_THING_NAME;
         }
         return result;
     }
@@ -124,7 +136,7 @@ public abstract class AbstractChannelConfiguration {
         return properties;
     }
 
-    public String getName() {
+    public @Nullable String getName() {
         return name;
     }
 
@@ -168,6 +180,10 @@ public abstract class AbstractChannelConfiguration {
         return availabilityTemplate;
     }
 
+    public boolean isEnabledByDefault() {
+        return enabledByDefault;
+    }
+
     @Nullable
     public Device getDevice() {
         return device;
@@ -184,6 +200,16 @@ public abstract class AbstractChannelConfiguration {
 
     public AvailabilityMode getAvailabilityMode() {
         return availabilityMode;
+    }
+
+    @Nullable
+    public String getJsonAttributesTemplate() {
+        return jsonAttributesTemplate;
+    }
+
+    @Nullable
+    public String getJsonAttributesTopic() {
+        return jsonAttributesTopic;
     }
 
     /**
@@ -215,7 +241,7 @@ public abstract class AbstractChannelConfiguration {
             }
             return config;
         } catch (JsonSyntaxException e) {
-            throw new ConfigurationException("Cannot parse channel configuration JSON", e);
+            throw new ConfigurationException("Cannot parse channel configuration JSON: " + e.getMessage(), e);
         }
     }
 }

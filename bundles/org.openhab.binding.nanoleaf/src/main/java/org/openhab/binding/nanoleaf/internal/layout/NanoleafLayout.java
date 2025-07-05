@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2010-2022 Contributors to the openHAB project
+ * Copyright (c) 2010-2024 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -10,7 +10,6 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-
 package org.openhab.binding.nanoleaf.internal.layout;
 
 import java.awt.Color;
@@ -31,6 +30,8 @@ import org.openhab.binding.nanoleaf.internal.model.GlobalOrientation;
 import org.openhab.binding.nanoleaf.internal.model.Layout;
 import org.openhab.binding.nanoleaf.internal.model.PanelLayout;
 import org.openhab.binding.nanoleaf.internal.model.PositionDatum;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Renders the Nanoleaf layout to an image.
@@ -40,6 +41,7 @@ import org.openhab.binding.nanoleaf.internal.model.PositionDatum;
 @NonNullByDefault
 public class NanoleafLayout {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(NanoleafLayout.class);
     private static final Color COLOR_BACKGROUND = Color.WHITE;
 
     public static byte[] render(PanelLayout panelLayout, PanelState state, LayoutSettings settings) throws IOException {
@@ -51,15 +53,17 @@ public class NanoleafLayout {
 
         Layout layout = panelLayout.getLayout();
         if (layout == null) {
+            LOGGER.warn("Returning no image as we don't have any layout to render");
             return new byte[] {};
         }
 
         List<PositionDatum> positionDatums = layout.getPositionData();
         if (positionDatums == null) {
+            LOGGER.warn("Returning no image as we don't have any position datums to render");
             return new byte[] {};
         }
 
-        ImagePoint2D size[] = findSize(positionDatums, rotationRadians);
+        ImagePoint2D[] size = findSize(positionDatums, rotationRadians);
         final ImagePoint2D min = size[0];
         final ImagePoint2D max = size[1];
 

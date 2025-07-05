@@ -56,9 +56,9 @@ This is of course essential if your connection to the remote openHAB server is o
 
 The `thing` thing has the following configuration parameters:
 
-| Parameter            | Required | Description                                 |
-|----------------------|----------|---------------------------------------------|
-| thingUID             | yes      | The thing UID in the remote openHAB server. |
+| Parameter            | Required | Description                                                                                                                                |
+|----------------------|----------|--------------------------------------------------------------------------------------------------------------------------------------------|
+| thingUID             | yes      | The thing UID in the remote openHAB server.                                                                                                |
 | buildTriggerChannels | no       | If set to true, a trigger channel will be automatically created and linked to each trigger channel from the remote thing. Default is true. |
 
 Please note that if your remote server is an openHAB v3 server, in order for all of your things to be properly initialized, you will need to define on your bridge thing a valid API token in the parameter `token` and also define the parameter `authenticateAnyway` to true in case you are using an unsecured connection (HTTP).
@@ -66,9 +66,9 @@ This API token can be created on your remote server using Main UI.
 
 Setting the `buildTriggerChannels` parameter to false is for the main following advanced usages:
 
-* you don't care about the trigger channels of this remote thing and you don't want the binding to create them locally,
-* you want to define the trigger channels in your configuration file, and only the channels that you will finally need,
-* you want to set a specific channel ID rather than using the channel ID created by the binding.
+- you don't care about the trigger channels of this remote thing and you don't want the binding to create them locally,
+- you want to define the trigger channels in your configuration file, and only the channels that you will finally need,
+- you want to set a specific channel ID rather than using the channel ID created by the binding.
 
 ## Thing Status
 
@@ -93,15 +93,15 @@ For example, if your remote thing provides a trigger channel with this UID `astr
 
 ## Limitations
 
-* The binding will not try to communicate with an openHAB v1 server.
+- The binding will not try to communicate with an openHAB v1 server.
 
 ## Example
 
-### demo.things:
+### `demo.things` Example
 
 Example of connection to a remote server in the local network:
 
-```
+```java
 Bridge remoteopenhab:server:oh2 "OH2 server" [ host="192.168.0.100", port=8443, useHttps=true, trustedCertificate=true ] {
     Thing thing tv "TV living room" [ thingUID="lgwebos:WebOSTV:tv" ]
     Thing thing astroSun "Astro sun" [ thingUID="astro:sun:local", buildTriggerChannels=false ] {
@@ -114,12 +114,12 @@ Bridge remoteopenhab:server:oh2 "OH2 server" [ host="192.168.0.100", port=8443, 
 
 Example of connection to a remote server outside the local network through a myopenhab cloud instance:
 
-```
+```java
 Bridge remoteopenhab:server:oh3 "OH3 server" [ host="myopenhab.org", useHttps=true, port=443, username="myUsername", password="myPassword" ]
 ```
 
-### demo.items:
+### `demo.items` Example
 
-```
+```java
 DateTime MyDate "Date [%1$tA %1$td %1$tR]" <calendar> { channel="remoteopenhab:server:oh2:MyDate" }
 ```

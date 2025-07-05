@@ -19,7 +19,6 @@ According to the myStrom API documentation all request specific to the myStrom B
 
 This extension does not support autodiscovery. The things need to be added manually.
 
-
 ## Thing Configuration
 
 The following parameters are valid for all thing types:
@@ -51,40 +50,41 @@ Disabling/enabling the thing can be used to update the properties.
 
 ## Channels
 
-| Channel ID       | Item Type            | Read only | Description                                                           | Thing types supporting this channel |
-| ---------------- | -------------------- | --------- | --------------------------------------------------------------------- |-------------------------------------|
-| switch           | Switch               | false     | Turn the device on or off                                             | mystromplug, mystrombulb            |
-| power            | Number:Power         | true      | The currently delivered power                                         | mystromplug, mystrombulb            |
-| temperature      | Number:Temperature   | true      | The temperature at the plug                                           | mystromplug, mystrompir             |
-| color            | Color                | false     | The color we set the bulb to (mode 'hsv')                             | mystrombulb                         |
-| colorTemperature | Dimmer               | false     | The color temperature of the bulb in mode 'mono' (percentage)         | mystrombulb                         |
-| brightness       | Dimmer               | false     | The brightness of the bulb in mode 'mono'                             | mystrombulb                         |
-| ramp             | Number:Time          | false     | Transition time from the light’s current state to the new state. [ms] | mystrombulb                         |
-| mode             | String               | false     | The color mode we want the Bulb to set to (rgb, hsv or mono)          | mystrombulb                         |
-| light            | Dimmer               | true      | The brightness of the Room.                                           | mystrompir                          |
-| motion           | Switch               | true      | Motionstatus of the sensor                                            | mystrompir                          |
+| Channel ID                      | Item Type          | Read only | Description                                                                                       | Thing types supporting this channel |
+|---------------------------------|--------------------|-----------|---------------------------------------------------------------------------------------------------|------------------------------------|
+| switch                          | Switch             | false     | Turn the device on or off                                                                         | mystromplug, mystrombulb           |
+| power                           | Number:Power       | true      | The currently delivered power                                                                     | mystromplug, mystrombulb           |
+| energy-consumed-since-last-call | Number:Energy      | true      | The watt seconds / Energy consumed since last call. Useful for accurate data logging and analysis | mystromplug                        |
+| temperature                     | Number:Temperature | true      | The temperature at the plug                                                                       | mystromplug, mystrompir            |
+| color                           | Color              | false     | The color we set the bulb to (mode 'hsv')                                                         | mystrombulb                        |
+| colorTemperature                | Dimmer             | false     | The color temperature of the bulb in mode 'mono' (percentage)                                     | mystrombulb                        |
+| brightness                      | Dimmer             | false     | The brightness of the bulb in mode 'mono'                                                         | mystrombulb                        |
+| ramp                            | Number:Time        | false     | Transition time from the light’s current state to the new state. [ms]                             | mystrombulb                        |
+| mode                            | String             | false     | The color mode we want the Bulb to set to (rgb, hsv or mono)                                      | mystrombulb                        |
+| light                           | Dimmer             | true      | The brightness of the Room.                                                                       | mystrompir                         |
+| motion                          | Switch             | true      | Motionstatus of the sensor                                                                        | mystrompir                         |
 
 ## Full Example
 
 ### Thing Configuration
 
-```
+```java
 Thing mystrom:mystromplug:d6217a31 "Plug" [hostname="hostname|ip"]
 ```
 
 ### Item Configuration
 
-```
-Switch PlugSwitch		"Plug" 	                		 		{channel="mystrom:mystromplug:d6217a31:switch"}
-Number:Temperature PlugTemperature "Temperature: [%.1f °C]"     {channel="mystrom:mystromplug:d6217a31:temperature"}  
-Number:Power PlugPower "Power: [%.1f W]"                        {channel="mystrom:mystromplug:d6217a31:power"} 
-
+```java
+Switch              PlugSwitch                      "Plug"                      {channel="mystrom:mystromplug:d6217a31:switch"}
+Number:Temperature  PlugTemperature                 "Temperature: [%.1f °C]"    {channel="mystrom:mystromplug:d6217a31:temperature"}
+Number:Power        PlugPower                       "Power: [%.1f W]"           {channel="mystrom:mystromplug:d6217a31:power"}
+Number:Energy       PlugEnergyConsumedSinceLastCall "Ws: [%.1f Ws]"             {channel="mystrom:mystromplug:d6217a31:energy-consumed-since-last-call"}
 ```
 
 ### Sitemap Configuration
 
-```
-Frame label="myStrom Plug" { 
+```perl
+Frame label="myStrom Plug" {
     Switch item=PlugSwitch
     Text item=PlugTemperature
     Text item=PlugPower

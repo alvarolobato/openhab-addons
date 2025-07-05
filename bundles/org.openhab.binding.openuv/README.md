@@ -14,7 +14,7 @@ The binding has no configuration options, all configuration is done at Bridge an
 
 ## Bridge Configuration
 
-The bridge has only one configuration parameter :
+The bridge has only one configuration parameter:
 
 | Parameter | Description                                                  |
 |-----------|--------------------------------------------------------------|
@@ -24,7 +24,7 @@ Will accept a Refresh command in order to reinitiate connexion (eg in case of Qu
 
 ## Thing Configuration
 
-The thing has a few configuration parameters :
+The thing has a few configuration parameters:
 
 | Parameter | Description                                                  |
 |-----------|--------------------------------------------------------------|
@@ -56,11 +56,21 @@ The OpenUV Report thing that is retrieved has these channels:
 | SafeExposure | Number:Time         | Safe exposure time for Fitzpatrick Skin Types.  |
 | elevation    | Number:Angle        | Current Sun elevation.                          |
 
-The elevation channel will be used as an input in order to limit API queries to OpenUV. If not used, 
+The elevation channel will be used as an input in order to limit API queries to OpenUV. If not used,
 the binding will not consider it. When value is provided queries will only be issued if the elevation is > 0°.
 This is quite useful with a free OpenUV account (50 req/day included): in this case, and with the elevation channel configured, a 20 minutes refresh interval should be ok (in Europe the longest day is around 15 hours).
 
 Thing can be extended with as many SafeExposure channels as needed for each skin type.
+
+## Provided icon set
+
+This binding has its own IconProvider and makes available the following list of icons
+
+| Icon Name          | Dynamic | Illustration               |
+|--------------------|---------|----------------------------|
+| oh:openuv:ozone    | No      | ![](doc/icon/ozone.svg)    |
+| oh:openuv:uv-alarm | Yes     | ![](doc/icon/uv-alarm.svg) |
+| oh:openuv:uv-index | Yes     | ![](doc/icon/uv-index.svg) |
 
 ## Examples
 
@@ -70,7 +80,7 @@ demo.things:
 Bridge openuv:openuvapi:local "OpenUV Api" [ apikey="xxxxYYYxxxx" ] {
     Thing uvreport city1 "UV In My City" [ location="52.5200066,13.4049540", refresh=20 ]{
         Channels:
-            Type SafeExposure : parents [       
+            Type SafeExposure : parents [
                 index="III"
             ]
             Type SafeExposure : childs [

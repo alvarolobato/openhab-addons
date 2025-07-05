@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2010-2022 Contributors to the openHAB project
+ * Copyright (c) 2010-2024 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -30,14 +30,14 @@ import org.openhab.core.thing.Thing;
  *
  */
 @NonNullByDefault
-public class AbstractBatteryPoweredDeviceHandler extends BoschSHCDeviceHandler {
+public abstract class AbstractBatteryPoweredDeviceHandler extends BoschSHCDeviceHandler {
 
     /**
      * Service to monitor the battery level of the device
      */
     private final BatteryLevelService batteryLevelService;
 
-    public AbstractBatteryPoweredDeviceHandler(Thing thing) {
+    protected AbstractBatteryPoweredDeviceHandler(Thing thing) {
         super(thing);
         this.batteryLevelService = new BatteryLevelService();
     }

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2010-2022 Contributors to the openHAB project
+ * Copyright (c) 2010-2024 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -16,11 +16,8 @@ import static org.openhab.binding.boschshc.internal.devices.BoschSHCBindingConst
 
 import java.util.List;
 
-import javax.measure.quantity.Dimensionless;
-import javax.measure.quantity.Temperature;
-
 import org.eclipse.jdt.annotation.NonNullByDefault;
-import org.openhab.binding.boschshc.internal.devices.AbstractBatteryPoweredDeviceHandler;
+import org.openhab.binding.boschshc.internal.devices.AbstractSmokeDetectorHandler;
 import org.openhab.binding.boschshc.internal.exceptions.BoschSHCException;
 import org.openhab.binding.boschshc.internal.services.airqualitylevel.AirQualityLevelService;
 import org.openhab.binding.boschshc.internal.services.airqualitylevel.dto.AirQualityLevelServiceState;
@@ -35,9 +32,11 @@ import org.openhab.core.thing.Thing;
  *
  * @author Stefan Kästle - Initial contribution
  * @author Christian Oeing - Use service instead of custom logic
+ * @author Christian Oeing - Add smoke detector service
+ * @author Gerd Zanker - AbstractSmokeDetectorHandler refactoring for reuse
  */
 @NonNullByDefault
-public class TwinguardHandler extends AbstractBatteryPoweredDeviceHandler {
+public class TwinguardHandler extends AbstractSmokeDetectorHandler {
 
     public TwinguardHandler(Thing thing) {
         super(thing);
@@ -53,11 +52,11 @@ public class TwinguardHandler extends AbstractBatteryPoweredDeviceHandler {
     }
 
     private void updateChannels(AirQualityLevelServiceState state) {
-        updateState(CHANNEL_TEMPERATURE, new QuantityType<Temperature>(state.temperature, SIUnits.CELSIUS));
+        updateState(CHANNEL_TEMPERATURE, new QuantityType<>(state.temperature, SIUnits.CELSIUS));
         updateState(CHANNEL_TEMPERATURE_RATING, new StringType(state.temperatureRating));
-        updateState(CHANNEL_HUMIDITY, new QuantityType<Dimensionless>(state.humidity, Units.PERCENT));
+        updateState(CHANNEL_HUMIDITY, new QuantityType<>(state.humidity, Units.PERCENT));
         updateState(CHANNEL_HUMIDITY_RATING, new StringType(state.humidityRating));
-        updateState(CHANNEL_PURITY, new QuantityType<Dimensionless>(state.purity, Units.PARTS_PER_MILLION));
+        updateState(CHANNEL_PURITY, new QuantityType<>(state.purity, Units.PARTS_PER_MILLION));
         updateState(CHANNEL_PURITY_RATING, new StringType(state.purityRating));
         updateState(CHANNEL_AIR_DESCRIPTION, new StringType(state.description));
         updateState(CHANNEL_COMBINED_RATING, new StringType(state.combinedRating));

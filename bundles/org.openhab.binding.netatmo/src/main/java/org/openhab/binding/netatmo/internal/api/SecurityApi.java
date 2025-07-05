@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2010-2022 Contributors to the openHAB project
+ * Copyright (c) 2010-2024 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -18,6 +18,7 @@ import java.net.URI;
 import java.time.ZonedDateTime;
 import java.util.Comparator;
 import java.util.List;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import javax.ws.rs.core.UriBuilder;
@@ -71,30 +72,31 @@ public class SecurityApi extends RestManager {
 
     private List<HomeEvent> getEvents(@Nullable Object... params) throws NetatmoException {
         UriBuilder uriBuilder = getApiUriBuilder(SUB_PATH_GET_EVENTS, params);
-        BodyResponse<Home> body = get(uriBuilder, NAEventsDataResponse.class).getBody();
-        if (body != null) {
-            Home home = body.getElement();
-            if (home != null) {
-                return home.getEvents();
-            }
+        if (get(uriBuilder, NAEventsDataResponse.class).getBody() instanceof BodyResponse<Home> body
+                && body.getElement() instanceof Home home) {
+            return home.getEvents();
         }
         throw new NetatmoException("home should not be null");
     }
 
-    public List<HomeEvent> getHomeEvents(String homeId, @Nullable ZonedDateTime freshestEventTime)
-            throws NetatmoException {
+    public List<HomeEvent> getHomeEvents(String homeId, ZonedDateTime freshestEventTime) throws NetatmoException {
         List<HomeEvent> events = getEvents(PARAM_HOME_ID, homeId);
 
-        // we have to rewind to the latest event just after oldestKnown
-        HomeEvent oldestRetrieved = events.get(events.size() - 1);
-        while (freshestEventTime != null && oldestRetrieved.getTime().isAfter(freshestEventTime)) {
-            events.addAll(getEvents(PARAM_HOME_ID, homeId, PARAM_EVENT_ID, oldestRetrieved.getId()));
-            oldestRetrieved = events.get(events.size() - 1);
+        // we have to rewind to the latest event just after freshestEventTime
+        if (!events.isEmpty()) {
+            String oldestId = "";
+            HomeEvent oldestRetrieved = events.get(events.size() - 1);
+            while (oldestRetrieved.getTime().isAfter(freshestEventTime) && !oldestId.equals(oldestRetrieved.getId())) {
+                oldestId = oldestRetrieved.getId();
+                events.addAll(getEvents(PARAM_HOME_ID, homeId, PARAM_EVENT_ID, oldestId, PARAM_SIZE, 300));
+                oldestRetrieved = events.get(events.size() - 1);
+            }
         }
 
-        // Remove unneeded events being before oldestKnown
-        return events.stream().filter(event -> freshestEventTime == null || event.getTime().isAfter(freshestEventTime))
-                .sorted(Comparator.comparing(HomeEvent::getTime).reversed()).collect(Collectors.toList());
+        // Remove potential duplicates then unneeded events being before freshestEventTime
+        return events.stream().filter(event -> event.getTime().isAfter(freshestEventTime))
+                .collect(Collectors.toConcurrentMap(HomeEvent::getId, Function.identity(), (p, q) -> p)).values()
+                .stream().sorted(Comparator.comparing(HomeEvent::getTime).reversed()).toList();
     }
 
     public List<HomeEvent> getPersonEvents(String homeId, String personId) throws NetatmoException {
@@ -122,13 +124,13 @@ public class SecurityApi extends RestManager {
     }
 
     public void changeFloodLightMode(String homeId, String cameraId, FloodLightMode mode) throws NetatmoException {
-        UriBuilder uriBuilder = getAppUriBuilder(PATH_STATE);
-        String payload = String.format(PAYLOAD_FLOODLIGHT, homeId, cameraId, mode.name().toLowerCase());
+        UriBuilder uriBuilder = getApiUriBuilder(PATH_STATE);
+        String payload = PAYLOAD_FLOODLIGHT.formatted(homeId, cameraId, mode.name().toLowerCase());
         post(uriBuilder, ApiResponse.Ok.class, payload);
     }
 
     public void setPersonAwayStatus(String homeId, String personId, boolean away) throws NetatmoException {
-        UriBuilder uriBuilder = getAppUriBuilder(away ? SUB_PATH_PERSON_AWAY : SUB_PATH_PERSON_HOME);
+        UriBuilder uriBuilder = getApiUriBuilder(away ? SUB_PATH_PERSON_AWAY : SUB_PATH_PERSON_HOME);
         String payload = String.format(away ? PAYLOAD_PERSON_AWAY : PAYLOAD_PERSON_HOME, homeId, personId);
         post(uriBuilder, ApiResponse.Ok.class, payload);
     }

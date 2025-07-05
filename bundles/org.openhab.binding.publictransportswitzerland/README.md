@@ -21,19 +21,21 @@ Upcoming departures for a single station. This is what you would usually see dis
 
 #### UI based Configuration
 
-`station` is the station name for which to display departures.  
-The name has to be one that is used by the swiss federal railways.  
+`station` is the station name for which to display departures.
+The name has to be one that is used by the swiss federal railways.
 Please consult their [website](https://sbb.ch/en).
 
 #### Textual configuration
 
 ##### Thing
-```
+
+```java
 Thing publictransportswitzerland:stationboard:zurich [ station="Zürich HB" ]
 ```
 
 ##### Items
-```
+
+```java
 String Next_Departure             "Next Departure"             { channel="publictransportswitzerland:stationboard:zurich:departures#1" }
 String Upcoming_Departures_TSV    "Upcoming_Departures_TSV"    { channel="publictransportswitzerland:stationboard:zurich:tsv" }
 ```

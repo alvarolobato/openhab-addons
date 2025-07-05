@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2010-2022 Contributors to the openHAB project
+ * Copyright (c) 2010-2024 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -21,7 +21,6 @@ import org.knowm.yank.exceptions.YankSQLException;
 import org.openhab.core.items.Item;
 import org.openhab.core.types.State;
 import org.openhab.persistence.jdbc.internal.dto.ItemVO;
-import org.openhab.persistence.jdbc.internal.dto.ItemsVO;
 import org.openhab.persistence.jdbc.internal.exceptions.JdbcSQLException;
 import org.openhab.persistence.jdbc.internal.utils.StringUtilsExt;
 import org.slf4j.Logger;
@@ -62,9 +61,11 @@ public class JdbcHsqldbDAO extends JdbcBaseDAO {
         // Prevent error against duplicate time value
         // http://hsqldb.org/doc/guide/dataaccess-chapt.html#dac_merge_statement
         // SQL_INSERT_ITEM_VALUE = "INSERT INTO #tableName# (TIME, VALUE) VALUES( NOW(), CAST( ? as #dbType#) )";
-        sqlInsertItemValue = "MERGE INTO #tableName# "
-                + "USING (VALUES #tablePrimaryValue#, CAST( ? as #dbType#)) temp (TIME, VALUE) ON (#tableName#.TIME=temp.TIME) "
-                + "WHEN NOT MATCHED THEN INSERT (TIME, VALUE) VALUES (temp.TIME, temp.VALUE)";
+        sqlInsertItemValue = """
+                MERGE INTO #tableName# \
+                USING (VALUES #tablePrimaryValue#, CAST( ? as #dbType#)) temp (TIME, VALUE) ON (#tableName#.TIME=temp.TIME) \
+                WHEN NOT MATCHED THEN INSERT (TIME, VALUE) VALUES (temp.TIME, temp.VALUE)\
+                """;
     }
 
     /**
@@ -95,33 +96,6 @@ public class JdbcHsqldbDAO extends JdbcBaseDAO {
         }
     }
 
-    @Override
-    public ItemsVO doCreateItemsTableIfNot(ItemsVO vo) throws JdbcSQLException {
-        String sql = StringUtilsExt.replaceArrayMerge(sqlCreateItemsTableIfNot,
-                new String[] { "#itemsManageTable#", "#colname#", "#coltype#", "#itemsManageTable#" },
-                new String[] { vo.getItemsManageTable(), vo.getColname(), vo.getColtype(), vo.getItemsManageTable() });
-        logger.debug("JDBC::doCreateItemsTableIfNot sql={}", sql);
-        try {
-            Yank.execute(sql, null);
-        } catch (YankSQLException e) {
-            throw new JdbcSQLException(e);
-        }
-        return vo;
-    }
-
-    @Override
-    public Long doCreateNewEntryInItemsTable(ItemsVO vo) throws JdbcSQLException {
-        String sql = StringUtilsExt.replaceArrayMerge(sqlCreateNewEntryInItemsTable,
-                new String[] { "#itemsManageTable#", "#itemname#" },
-                new String[] { vo.getItemsManageTable(), vo.getItemName() });
-        logger.debug("JDBC::doCreateNewEntryInItemsTable sql={}", sql);
-        try {
-            return Yank.insert(sql, null);
-        } catch (YankSQLException e) {
-            throw new JdbcSQLException(e);
-        }
-    }
-
     /*************
      * ITEM DAOs *
      *************/
@@ -130,8 +104,8 @@ public class JdbcHsqldbDAO extends JdbcBaseDAO {
         ItemVO storedVO = storeItemValueProvider(item, itemState, vo);
         String sql = StringUtilsExt.replaceArrayMerge(sqlInsertItemValue,
                 new String[] { "#tableName#", "#dbType#", "#tableName#", "#tablePrimaryValue#" },
-                new String[] { storedVO.getTableName(), storedVO.getDbType(), storedVO.getTableName(),
-                        sqlTypes.get("tablePrimaryValue") });
+                new String[] { formattedIdentifier(storedVO.getTableName()), storedVO.getDbType(),
+                        storedVO.getTableName(), sqlTypes.get("tablePrimaryValue") });
         Object[] params = { storedVO.getValue() };
         logger.debug("JDBC::doStoreItemValue sql={} value='{}'", sql, storedVO.getValue());
         try {
@@ -146,7 +120,8 @@ public class JdbcHsqldbDAO extends JdbcBaseDAO {
         ItemVO storedVO = storeItemValueProvider(item, itemState, vo);
         String sql = StringUtilsExt.replaceArrayMerge(sqlInsertItemValue,
                 new String[] { "#tableName#", "#dbType#", "#tableName#", "#tablePrimaryValue#" },
-                new String[] { storedVO.getTableName(), storedVO.getDbType(), storedVO.getTableName(), "?" });
+                new String[] { formattedIdentifier(storedVO.getTableName()), storedVO.getDbType(),
+                        storedVO.getTableName(), "?" });
         java.sql.Timestamp timestamp = new java.sql.Timestamp(date.toInstant().toEpochMilli());
         Object[] params = { timestamp, storedVO.getValue() };
         logger.debug("JDBC::doStoreItemValue sql={} timestamp={} value='{}'", sql, timestamp, storedVO.getValue());

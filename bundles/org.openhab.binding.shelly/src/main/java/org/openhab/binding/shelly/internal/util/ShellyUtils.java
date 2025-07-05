@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2010-2022 Contributors to the openHAB project
+ * Copyright (c) 2010-2024 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -27,6 +27,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 
 import javax.measure.Unit;
 
@@ -37,6 +38,7 @@ import org.openhab.binding.shelly.internal.api.ShellyDeviceProfile;
 import org.openhab.core.library.types.DateTimeType;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.library.types.OnOffType;
+import org.openhab.core.library.types.OpenClosedType;
 import org.openhab.core.library.types.PercentType;
 import org.openhab.core.library.types.QuantityType;
 import org.openhab.core.library.types.StringType;
@@ -235,21 +237,28 @@ public class ShellyUtils {
     }
 
     public static Double getNumber(Command command) throws IllegalArgumentException {
-        if (command instanceof DecimalType) {
-            return ((DecimalType) command).doubleValue();
+        if (command instanceof QuantityType<?> quantityCommand) {
+            return quantityCommand.doubleValue();
         }
-        if (command instanceof QuantityType) {
-            return ((QuantityType<?>) command).doubleValue();
+        if (command instanceof DecimalType decimalCommand) {
+            return decimalCommand.doubleValue();
         }
-        throw new IllegalArgumentException("Unable to convert number");
+        if (command instanceof Number numberCommand) {
+            return numberCommand.doubleValue();
+        }
+        throw new IllegalArgumentException("Invalid Number type for conversion: " + command);
     }
 
     public static OnOffType getOnOff(@Nullable Boolean value) {
-        return (value != null ? value ? OnOffType.ON : OnOffType.OFF : OnOffType.OFF);
+        return OnOffType.from(value != null && value);
+    }
+
+    public static OpenClosedType getOpenClosed(@Nullable Boolean value) {
+        return (value != null && value ? OpenClosedType.OPEN : OpenClosedType.CLOSED);
     }
 
     public static OnOffType getOnOff(int value) {
-        return value == 0 ? OnOffType.OFF : OnOffType.ON;
+        return OnOffType.from(value != 0);
     }
 
     public static State toQuantityType(@Nullable Double value, int digits, Unit<?> unit) {
@@ -282,12 +291,12 @@ public class ShellyUtils {
         }
     }
 
-    public static Long now() {
-        return System.currentTimeMillis() / 1000L;
+    public static double now() {
+        return System.currentTimeMillis() / 1000.0;
     }
 
     public static DateTimeType getTimestamp() {
-        return new DateTimeType(ZonedDateTime.ofInstant(Instant.ofEpochSecond(now()), ZoneId.systemDefault()));
+        return new DateTimeType(ZonedDateTime.now().truncatedTo(ChronoUnit.SECONDS));
     }
 
     public static DateTimeType getTimestamp(String zone, long timestamp) {

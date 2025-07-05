@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2010-2022 Contributors to the openHAB project
+ * Copyright (c) 2010-2024 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -36,6 +36,8 @@ import org.openhab.binding.oppo.internal.communication.OppoMessageEventListener;
 import org.openhab.binding.oppo.internal.communication.OppoSerialConnector;
 import org.openhab.binding.oppo.internal.communication.OppoStatusCodes;
 import org.openhab.binding.oppo.internal.configuration.OppoThingConfiguration;
+import org.openhab.core.i18n.LocaleProvider;
+import org.openhab.core.i18n.TranslationProvider;
 import org.openhab.core.io.transport.serial.SerialPortManager;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.library.types.NextPreviousType;
@@ -56,6 +58,8 @@ import org.openhab.core.types.Command;
 import org.openhab.core.types.State;
 import org.openhab.core.types.StateOption;
 import org.openhab.core.types.UnDefType;
+import org.osgi.framework.Bundle;
+import org.osgi.framework.FrameworkUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -85,6 +89,10 @@ public class OppoHandler extends BaseThingHandler implements OppoMessageEventLis
     private SerialPortManager serialPortManager;
     private OppoConnector connector = new OppoDefaultConnector();
 
+    private final TranslationProvider translationProvider;
+    private final LocaleProvider localeProvider;
+    private final @Nullable Bundle bundle;
+
     private List<StateOption> inputSourceOptions = new ArrayList<>();
     private List<StateOption> hdmiModeOptions = new ArrayList<>();
 
@@ -105,10 +113,14 @@ public class OppoHandler extends BaseThingHandler implements OppoMessageEventLis
      * Constructor
      */
     public OppoHandler(Thing thing, OppoStateDescriptionOptionProvider stateDescriptionProvider,
-            SerialPortManager serialPortManager) {
+            SerialPortManager serialPortManager, TranslationProvider translationProvider,
+            LocaleProvider localeProvider) {
         super(thing);
         this.stateDescriptionProvider = stateDescriptionProvider;
         this.serialPortManager = serialPortManager;
+        this.translationProvider = translationProvider;
+        this.localeProvider = localeProvider;
+        this.bundle = FrameworkUtil.getBundle(OppoHandler.class);
     }
 
     @Override
@@ -268,8 +280,8 @@ public class OppoHandler extends BaseThingHandler implements OppoMessageEventLis
                         }
                         break;
                     case CHANNEL_SOURCE:
-                        if (command instanceof DecimalType) {
-                            int value = ((DecimalType) command).intValue();
+                        if (command instanceof DecimalType decimalCommand) {
+                            int value = decimalCommand.intValue();
                             connector.sendCommand(OppoCommand.SET_INPUT_SOURCE, String.valueOf(value));
                         }
                         break;
@@ -297,14 +309,14 @@ public class OppoHandler extends BaseThingHandler implements OppoMessageEventLis
                         }
                         break;
                     case CHANNEL_SUB_SHIFT:
-                        if (command instanceof DecimalType) {
-                            int value = ((DecimalType) command).intValue();
+                        if (command instanceof DecimalType decimalCommand) {
+                            int value = decimalCommand.intValue();
                             connector.sendCommand(OppoCommand.SET_SUBTITLE_SHIFT, String.valueOf(value));
                         }
                         break;
                     case CHANNEL_OSD_POSITION:
-                        if (command instanceof DecimalType) {
-                            int value = ((DecimalType) command).intValue();
+                        if (command instanceof DecimalType decimalCommand) {
+                            int value = decimalCommand.intValue();
                             connector.sendCommand(OppoCommand.SET_OSD_POSITION, String.valueOf(value));
                         }
                         break;
@@ -324,11 +336,11 @@ public class OppoHandler extends BaseThingHandler implements OppoMessageEventLis
                         }
                         break;
                     default:
-                        logger.warn("Unknown Command {} from channel {}", command, channel);
+                        logger.debug("Unknown command {} from channel {}", command, channel);
                         break;
                 }
             } catch (OppoException e) {
-                logger.warn("Command {} from channel {} failed: {}", command, channel, e.getMessage());
+                logger.debug("Command {} from channel {} failed: {}", command, channel, e.getMessage());
                 updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "Sending command failed");
                 closeConnection();
                 scheduleReconnectJob();
@@ -366,7 +378,7 @@ public class OppoHandler extends BaseThingHandler implements OppoMessageEventLis
     /**
      * Handle an event received from the Oppo player
      *
-     * @param event the event to process
+     * @param evt the event to process
      */
     @Override
     public void onNewMessageEvent(OppoMessageEvent evt) {
@@ -492,6 +504,8 @@ public class OppoHandler extends BaseThingHandler implements OppoMessageEventLis
                             updateChannelState(CHANNEL_SUBTITLE_TYPE, UNDEF);
                         }
                         updateChannelState(CHANNEL_PLAY_MODE, playStatus);
+                        updateState(CHANNEL_CONTROL,
+                                PLAY.equals(playStatus) ? PlayPauseType.PLAY : PlayPauseType.PAUSE);
 
                         // ejecting the disc does not produce a UDT message, so clear disc type manually
                         if (OPEN.equals(playStatus) || NO_DISC.equals(playStatus)) {
@@ -716,7 +730,7 @@ public class OppoHandler extends BaseThingHandler implements OppoMessageEventLis
                         }
 
                     } catch (OppoException | InterruptedException e) {
-                        logger.warn("Polling error: {}", e.getMessage());
+                        logger.debug("Polling error: {}", e.getMessage());
                     }
 
                     // if the last event received was more than 1.25 intervals ago,
@@ -775,7 +789,7 @@ public class OppoHandler extends BaseThingHandler implements OppoMessageEventLis
                 break;
             case CHANNEL_POWER:
             case CHANNEL_MUTE:
-                state = ON.equals(value) ? OnOffType.ON : OnOffType.OFF;
+                state = OnOffType.from(ON.equals(value));
                 break;
             case CHANNEL_SOURCE:
             case CHANNEL_SUB_SHIFT:
@@ -835,15 +849,18 @@ public class OppoHandler extends BaseThingHandler implements OppoMessageEventLis
                 connector.sendCommand(OppoCommand.REWIND);
             }
         } else {
-            logger.warn("Unknown control command: {}", command);
+            logger.debug("Unknown control command: {}", command);
         }
     }
 
     private void buildOptionDropdowns(int model) {
+        hdmiModeOptions.clear();
+        inputSourceOptions.clear();
+
         if (model == MODEL83 || model == MODEL103 || model == MODEL105) {
-            hdmiModeOptions.add(new StateOption("AUTO", "Auto"));
-            hdmiModeOptions.add(new StateOption("SRC", "Source Direct"));
-            if (!(model == MODEL83)) {
+            hdmiModeOptions.add(new StateOption("AUTO", getString("auto", "Auto")));
+            hdmiModeOptions.add(new StateOption("SRC", getString("direct", "Source Direct")));
+            if (model != MODEL83) {
                 hdmiModeOptions.add(new StateOption("4K2K", "4K*2K"));
             }
             hdmiModeOptions.add(new StateOption("1080P", "1080P"));
@@ -854,26 +871,27 @@ public class OppoHandler extends BaseThingHandler implements OppoMessageEventLis
         }
 
         if (model == MODEL103 || model == MODEL105) {
-            inputSourceOptions.add(new StateOption("0", "Blu-Ray Player"));
-            inputSourceOptions.add(new StateOption("1", "HDMI/MHL IN-Front"));
-            inputSourceOptions.add(new StateOption("2", "HDMI IN-Back"));
-            inputSourceOptions.add(new StateOption("3", "ARC"));
+            inputSourceOptions.add(new StateOption("0", getString("blu_ray", "Blu-ray Player")));
+            inputSourceOptions.add(new StateOption("1", getString("hdmi_in_front", "HDMI/MHL In-Front")));
+            inputSourceOptions.add(new StateOption("2", getString("hdmi_in_back", "HDMI In-Back")));
+            inputSourceOptions.add(new StateOption("3", getString("arc1", "ARC 1")));
+            inputSourceOptions.add(new StateOption("4", getString("arc2", "ARC 2")));
 
             if (model == MODEL105) {
-                inputSourceOptions.add(new StateOption("4", "Optical In"));
-                inputSourceOptions.add(new StateOption("5", "Coaxial In"));
-                inputSourceOptions.add(new StateOption("6", "USB Audio In"));
+                inputSourceOptions.add(new StateOption("5", getString("optical", "Optical In")));
+                inputSourceOptions.add(new StateOption("6", getString("coaxial", "Coaxial In")));
+                inputSourceOptions.add(new StateOption("7", getString("usb", "USB Audio In")));
             }
         }
 
         if (model == MODEL203 || model == MODEL205) {
-            hdmiModeOptions.add(new StateOption("AUTO", "Auto"));
-            hdmiModeOptions.add(new StateOption("SRC", "Source Direct"));
-            hdmiModeOptions.add(new StateOption("UHD_AUTO", "UHD Auto"));
+            hdmiModeOptions.add(new StateOption("AUTO", getString("auto", "Auto")));
+            hdmiModeOptions.add(new StateOption("SRC", getString("direct", "Source Direct")));
+            hdmiModeOptions.add(new StateOption("UHD_AUTO", getString("auto_uhd", "UHD Auto")));
             hdmiModeOptions.add(new StateOption("UHD24", "UHD24"));
             hdmiModeOptions.add(new StateOption("UHD50", "UHD50"));
             hdmiModeOptions.add(new StateOption("UHD60", "UHD60"));
-            hdmiModeOptions.add(new StateOption("1080P_AUTO", "1080P Auto"));
+            hdmiModeOptions.add(new StateOption("1080P_AUTO", getString("auto_1080p", "1080P Auto")));
             hdmiModeOptions.add(new StateOption("1080P24", "1080P24"));
             hdmiModeOptions.add(new StateOption("1080P50", "1080P50"));
             hdmiModeOptions.add(new StateOption("1080P60", "1080P60"));
@@ -886,16 +904,20 @@ public class OppoHandler extends BaseThingHandler implements OppoMessageEventLis
             hdmiModeOptions.add(new StateOption("480P", "480P"));
             hdmiModeOptions.add(new StateOption("480I", "480I"));
 
-            inputSourceOptions.add(new StateOption("0", "Blu-Ray Player"));
-            inputSourceOptions.add(new StateOption("1", "HDMI IN"));
-            inputSourceOptions.add(new StateOption("2", "ARC"));
+            inputSourceOptions.add(new StateOption("0", getString("blu_ray", "Blu-ray Player")));
+            inputSourceOptions.add(new StateOption("1", getString("hdmi_in", "HDMI In")));
+            inputSourceOptions.add(new StateOption("2", getString("arc", "ARC")));
 
             if (model == MODEL205) {
-                inputSourceOptions.add(new StateOption("3", "Optical In"));
-                inputSourceOptions.add(new StateOption("4", "Coaxial In"));
-                inputSourceOptions.add(new StateOption("5", "USB Audio In"));
+                inputSourceOptions.add(new StateOption("3", getString("optical", "Optical In")));
+                inputSourceOptions.add(new StateOption("4", getString("coaxial", "Coaxial In")));
+                inputSourceOptions.add(new StateOption("5", getString("usb", "USB Audio In")));
             }
         }
+    }
+
+    private @Nullable String getString(String i18nKey, String defaultStr) {
+        return translationProvider.getText(bundle, "option." + i18nKey, defaultStr, localeProvider.getLocale());
     }
 
     private void handleHdmiModeUpdate(String updateData) {

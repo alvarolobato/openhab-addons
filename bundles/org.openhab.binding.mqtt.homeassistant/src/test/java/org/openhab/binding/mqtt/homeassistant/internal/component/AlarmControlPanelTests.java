@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2010-2022 Contributors to the openHAB project
+ * Copyright (c) 2010-2024 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -36,63 +36,61 @@ public class AlarmControlPanelTests extends AbstractComponentTests {
     public void testAlarmControlPanel() {
         // @formatter:off
         var component = discoverComponent(configTopicToMqtt(CONFIG_TOPIC),
-                "{ " +
-                        "  \"availability\": [ " +
-                        "    { " +
-                        "      \"topic\": \"zigbee2mqtt/bridge/state\" " +
-                        "    } " +
-                        "  ], " +
-                        "  \"code\": \"12345\", " +
-                        "  \"command_topic\": \"zigbee2mqtt/alarm/set/state\", " +
-                        "  \"device\": { " +
-                        "    \"identifiers\": [ " +
-                        "      \"zigbee2mqtt_0x0000000000000000\" " +
-                        "    ], " +
-                        "    \"manufacturer\": \"BestAlarmEver\", " +
-                        "    \"model\": \"Heavy duty super duper alarm\", " +
-                        "    \"name\": \"Alarm\", " +
-                        "    \"sw_version\": \"Zigbee2MQTT 1.18.2\" " +
-                        "  }, " +
-                        "  \"name\": \"alarm\", " +
-                        "  \"payload_arm_away\": \"ARM_AWAY_\", " +
-                        "  \"payload_arm_home\": \"ARM_HOME_\", " +
-                        "  \"payload_arm_night\": \"ARM_NIGHT_\", " +
-                        "  \"payload_arm_custom_bypass\": \"ARM_CUSTOM_BYPASS_\", " +
-                        "  \"payload_disarm\": \"DISARM_\", " +
-                        "  \"state_topic\": \"zigbee2mqtt/alarm/state\" " +
-                        "} ");
+                """
+                { \
+                  "availability": [ \
+                    { \
+                      "topic": "zigbee2mqtt/bridge/state" \
+                    } \
+                  ], \
+                  "code": "12345", \
+                  "command_topic": "zigbee2mqtt/alarm/set/state", \
+                  "device": { \
+                    "identifiers": [ \
+                      "zigbee2mqtt_0x0000000000000000" \
+                    ], \
+                    "manufacturer": "BestAlarmEver", \
+                    "model": "Heavy duty super duper alarm", \
+                    "name": "Alarm", \
+                    "sw_version": "Zigbee2MQTT 1.18.2" \
+                  }, \
+                  "name": "alarm", \
+                  "payload_arm_away": "ARM_AWAY_", \
+                  "payload_arm_home": "ARM_HOME_", \
+                  "payload_arm_night": "ARM_NIGHT_", \
+                  "payload_arm_custom_bypass": "ARM_CUSTOM_BYPASS_", \
+                  "payload_disarm": "DISARM_", \
+                  "state_topic": "zigbee2mqtt/alarm/state" \
+                } \
+                """);
         // @formatter:on
 
-        assertThat(component.channels.size(), is(4));
+        assertThat(component.channels.size(), is(1));
         assertThat(component.getName(), is("alarm"));
 
-        assertChannel(component, AlarmControlPanel.STATE_CHANNEL_ID, "zigbee2mqtt/alarm/state", "", "alarm",
-                TextValue.class);
-        assertChannel(component, AlarmControlPanel.SWITCH_DISARM_CHANNEL_ID, "", "zigbee2mqtt/alarm/set/state", "alarm",
-                TextValue.class);
-        assertChannel(component, AlarmControlPanel.SWITCH_ARM_AWAY_CHANNEL_ID, "", "zigbee2mqtt/alarm/set/state",
-                "alarm", TextValue.class);
-        assertChannel(component, AlarmControlPanel.SWITCH_ARM_HOME_CHANNEL_ID, "", "zigbee2mqtt/alarm/set/state",
-                "alarm", TextValue.class);
+        assertChannel(component, AlarmControlPanel.STATE_CHANNEL_ID, "zigbee2mqtt/alarm/state",
+                "zigbee2mqtt/alarm/set/state", "alarm", TextValue.class);
 
         publishMessage("zigbee2mqtt/alarm/state", "armed_home");
         assertState(component, AlarmControlPanel.STATE_CHANNEL_ID, new StringType("armed_home"));
         publishMessage("zigbee2mqtt/alarm/state", "armed_away");
         assertState(component, AlarmControlPanel.STATE_CHANNEL_ID, new StringType("armed_away"));
 
-        component.getChannel(AlarmControlPanel.SWITCH_DISARM_CHANNEL_ID).getState()
-                .publishValue(new StringType("DISARM_"));
+        component.getChannel(AlarmControlPanel.STATE_CHANNEL_ID).getState().publishValue(new StringType("DISARM_"));
         assertPublished("zigbee2mqtt/alarm/set/state", "DISARM_");
-        component.getChannel(AlarmControlPanel.SWITCH_ARM_AWAY_CHANNEL_ID).getState()
-                .publishValue(new StringType("ARM_AWAY_"));
+        component.getChannel(AlarmControlPanel.STATE_CHANNEL_ID).getState().publishValue(new StringType("ARM_AWAY_"));
         assertPublished("zigbee2mqtt/alarm/set/state", "ARM_AWAY_");
-        component.getChannel(AlarmControlPanel.SWITCH_ARM_HOME_CHANNEL_ID).getState()
-                .publishValue(new StringType("ARM_HOME_"));
+        component.getChannel(AlarmControlPanel.STATE_CHANNEL_ID).getState().publishValue(new StringType("ARM_HOME_"));
         assertPublished("zigbee2mqtt/alarm/set/state", "ARM_HOME_");
     }
 
     @Override
     protected Set<String> getConfigTopics() {
         return Set.of(CONFIG_TOPIC);
+    }
+
+    @Override
+    protected boolean useNewStyleChannels() {
+        return true;
     }
 }

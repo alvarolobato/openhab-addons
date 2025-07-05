@@ -15,6 +15,7 @@ There also are nice tools on the web for visualizing InfluxDB time series, such 
 
 Some example entries for an item with the name "speedtest" without any further configuration would look like this:
 
+```
     > Query using Influx DB 2.0 syntax for 1.0 is different
     > from(bucket: "default")
         |> range(start: -30d)
@@ -25,6 +26,7 @@ Some example entries for an item with the name "speedtest" without any further c
     -----               -----     ------
     1558302027124000000 speedtest 123289369.0
     1558332852716000000 speedtest 80423789.0
+```
 
 ## Prerequisites
 
@@ -65,16 +67,14 @@ You can also add additional tags for structuring your data. For example, you can
 
 The item configuration will look like this:
 
-```
+```java
 Group:Number:AVG gTempSensors
 
 Number:Temperature tempLivingRoom (gTempSensors) { influxdb="temperature" [floor="groundfloor"] }
 Number:Temperature tempKitchen (gTempSensors) { influxdb="temperature" [floor="groundfloor"] }
 
-
 Number:Temperature tempBedRoom (gTempSensors) { influxdb="temperature" [floor="firstfloor"] }
 Number:Temperature tempBath (gTempSensors) { influxdb="temperature" [floor="firstfloor"] }
-
 ```
 
 You can also set the `influxdb` metadata using the UI. From each item configuration screen do:
@@ -95,7 +95,7 @@ temperature,item=tempBath,floor=firstfloor
 
 You can now easily select all temperatures of the firstfloor or the average temperature of the groundfloor.
 
-*Warning: Do **not** override the tag `item` within the metadata. This tag is used internally by openHAB and changing it will lead to problems querying the persisted datapoints.*
+*Warning:* Do **not** override the tag `item` within the metadata. This tag is used internally by openHAB and changing it will lead to problems querying the persisted datapoints.
 
 #### Extended automatic tagging
 
@@ -106,3 +106,13 @@ Besides the metadata tags, there are additional configuration parameters to acti
 | addCategoryTag | false   | no       | Should the category of the item be included as tag "category"? If no category is set, "n/a" is used. |
 | addTypeTag     | false   | no       | Should the item type be included as tag "type"?                                                      |
 | addLabelTag    | false   | no       | Should the item label be included as tag "label"? If no label is set, "n/a" is used.                 |
+
+### Connect to InfluxDB via TLS
+
+InfluxDB supports TLS encryption to secure the communication with clients.
+
+If you use a self-signed certificate for your InfluxDB instance (which is very likely), you need to add the certificate itself or your internal CA's certificate to the Java keystore:
+
+1. Find your JVM's path with `ls -all /usr/bin/java`, e.g. `/opt/java/zulu17.38.21-ca-jdk17.0.5-linux_aarch32hf/bin/java`. You may need to follow some symlinks, use `ls -all` again.
+1. Go to the `lib/security` directory of your JVM, e.g. `cd /opt/java/zulu17.38.21-ca-jdk17.0.5-linux_aarch32hf/lib/security`.
+1. Add the certificate to the JVM's keystore: `sudo keytool -importcert -file <path-to-certfile> -cacerts -keypass changeit -storepass changeit -alias <alias-for-cert>`.

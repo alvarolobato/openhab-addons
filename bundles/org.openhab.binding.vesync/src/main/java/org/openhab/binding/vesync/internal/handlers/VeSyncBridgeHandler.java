@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2010-2022 Contributors to the openHAB project
+ * Copyright (c) 2010-2024 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -15,9 +15,10 @@ package org.openhab.binding.vesync.internal.handlers;
 import static org.openhab.binding.vesync.internal.VeSyncConstants.*;
 
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -27,7 +28,6 @@ import javax.validation.constraints.NotNull;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.vesync.internal.VeSyncBridgeConfiguration;
-import org.openhab.binding.vesync.internal.api.IHttpClientProvider;
 import org.openhab.binding.vesync.internal.api.VeSyncV2ApiHelper;
 import org.openhab.binding.vesync.internal.discovery.DeviceMetaDataUpdatedHandler;
 import org.openhab.binding.vesync.internal.discovery.VeSyncDiscoveryService;
@@ -36,6 +36,9 @@ import org.openhab.binding.vesync.internal.dto.responses.VeSyncManagedDeviceBase
 import org.openhab.binding.vesync.internal.dto.responses.VeSyncUserSession;
 import org.openhab.binding.vesync.internal.exceptions.AuthenticationException;
 import org.openhab.binding.vesync.internal.exceptions.DeviceUnknownException;
+import org.openhab.core.i18n.LocaleProvider;
+import org.openhab.core.i18n.TranslationProvider;
+import org.openhab.core.io.net.http.HttpClientFactory;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
@@ -46,6 +49,9 @@ import org.openhab.core.thing.binding.BaseBridgeHandler;
 import org.openhab.core.thing.binding.ThingHandler;
 import org.openhab.core.thing.binding.ThingHandlerService;
 import org.openhab.core.types.Command;
+import org.osgi.framework.Bundle;
+import org.osgi.framework.FrameworkUtil;
+import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,19 +68,30 @@ public class VeSyncBridgeHandler extends BaseBridgeHandler implements VeSyncClie
     private static final int DEFAULT_DEVICE_SCAN_RECOVERY_INTERVAL = 60;
     private static final int DEFAULT_DEVICE_SCAN_DISABLED = -1;
 
+    private volatile int backgroundScanTime = -1;
+
+    protected final VeSyncV2ApiHelper api;
     private final Logger logger = LoggerFactory.getLogger(VeSyncBridgeHandler.class);
+    private final Object scanConfigLock = new Object();
+
+    private final TranslationProvider translationProvider;
+    private final LocaleProvider localeProvider;
+    private final Bundle bundle;
 
     private @Nullable ScheduledFuture<?> backgroundDiscoveryPollingJob;
 
-    protected final VeSyncV2ApiHelper api = new VeSyncV2ApiHelper();
-    private IHttpClientProvider httpClientProvider;
-
-    private volatile int backgroundScanTime = -1;
-    private final Object scanConfigLock = new Object();
-
-    public VeSyncBridgeHandler(Bridge bridge, @NotNull IHttpClientProvider httpClientProvider) {
+    public VeSyncBridgeHandler(Bridge bridge, @Reference HttpClientFactory httpClientFactory,
+            @Reference TranslationProvider translationProvider, @Reference LocaleProvider localeProvider) {
         super(bridge);
-        this.httpClientProvider = httpClientProvider;
+        api = new VeSyncV2ApiHelper(httpClientFactory.getCommonHttpClient());
+        this.translationProvider = translationProvider;
+        this.localeProvider = localeProvider;
+        this.bundle = FrameworkUtil.getBundle(getClass());
+    }
+
+    public String getLocalizedText(String key, @Nullable Object @Nullable... arguments) {
+        String result = translationProvider.getText(bundle, key, key, localeProvider.getLocale(), arguments);
+        return Objects.nonNull(result) ? result : key;
     }
 
     public ThingUID getUID() {
@@ -86,8 +103,8 @@ public class VeSyncBridgeHandler extends BaseBridgeHandler implements VeSyncClie
         boolean frequentScanReq = false;
         for (Thing th : getThing().getThings()) {
             ThingHandler handler = th.getHandler();
-            if (handler instanceof VeSyncBaseDeviceHandler) {
-                if (((VeSyncBaseDeviceHandler) handler).requiresMetaDataFrequentUpdates()) {
+            if (handler instanceof VeSyncBaseDeviceHandler veSyncBaseDeviceHandler) {
+                if (veSyncBaseDeviceHandler.requiresMetaDataFrequentUpdates()) {
                     frequentScanReq = true;
                     break;
                 }
@@ -145,7 +162,8 @@ public class VeSyncBridgeHandler extends BaseBridgeHandler implements VeSyncClie
             runDeviceScanSequence();
             updateStatus(ThingStatus.ONLINE);
         } catch (AuthenticationException ae) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Check login credentials");
+            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+                    getLocalizedText("bridge.offline.check-credentials"));
         }
     }
 
@@ -159,13 +177,19 @@ public class VeSyncBridgeHandler extends BaseBridgeHandler implements VeSyncClie
     }
 
     public java.util.stream.Stream<@NotNull VeSyncManagedDeviceBase> getAirPurifiersMetadata() {
-        return api.getMacLookupMap().values().stream()
-                .filter(x -> VeSyncDeviceAirPurifierHandler.SUPPORTED_DEVICE_TYPES.contains(x.deviceType));
+        return api.getMacLookupMap().values().stream().filter(x -> !VeSyncBaseDeviceHandler
+                .getDeviceFamilyMetadata(x.getDeviceType(), VeSyncDeviceAirPurifierHandler.DEV_TYPE_FAMILY_AIR_PURIFIER,
+                        VeSyncDeviceAirPurifierHandler.SUPPORTED_MODEL_FAMILIES)
+                .equals(VeSyncBaseDeviceHandler.UNKNOWN));
     }
 
     public java.util.stream.Stream<@NotNull VeSyncManagedDeviceBase> getAirHumidifiersMetadata() {
         return api.getMacLookupMap().values().stream()
-                .filter(x -> VeSyncDeviceAirHumidifierHandler.SUPPORTED_DEVICE_TYPES.contains(x.deviceType));
+                .filter(x -> !VeSyncBaseDeviceHandler
+                        .getDeviceFamilyMetadata(x.getDeviceType(),
+                                VeSyncDeviceAirHumidifierHandler.DEV_TYPE_FAMILY_AIR_HUMIDIFIER,
+                                VeSyncDeviceAirHumidifierHandler.SUPPORTED_MODEL_FAMILIES)
+                        .equals(VeSyncBaseDeviceHandler.UNKNOWN));
     }
 
     protected void updateThings() {
@@ -179,21 +203,19 @@ public class VeSyncBridgeHandler extends BaseBridgeHandler implements VeSyncClie
     }
 
     private void updateThing(VeSyncBridgeConfiguration config, @Nullable ThingHandler handler) {
-        if (handler instanceof VeSyncBaseDeviceHandler) {
-            ((VeSyncBaseDeviceHandler) handler).updateDeviceMetaData();
-            ((VeSyncBaseDeviceHandler) handler).updateBridgeBasedPolls(config);
+        if (handler instanceof VeSyncBaseDeviceHandler veSyncBaseDeviceHandler) {
+            veSyncBaseDeviceHandler.updateDeviceMetaData();
+            veSyncBaseDeviceHandler.updateBridgeBasedPolls(config);
         }
     }
 
     @Override
     public Collection<Class<? extends ThingHandlerService>> getServices() {
-        return Collections.singleton(VeSyncDiscoveryService.class);
+        return Set.of(VeSyncDiscoveryService.class);
     }
 
     @Override
     public void initialize() {
-        api.setHttpClient(httpClientProvider.getHttpClient());
-
         VeSyncBridgeConfiguration config = getConfigAs(VeSyncBridgeConfiguration.class);
 
         scheduler.submit(() -> {
@@ -205,7 +227,8 @@ public class VeSyncBridgeHandler extends BaseBridgeHandler implements VeSyncClie
                 runDeviceScanSequence();
                 updateStatus(ThingStatus.ONLINE);
             } catch (final AuthenticationException ae) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Check login credentials");
+                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+                        getLocalizedText("bridge.offline.check-credentials"));
                 // The background scan will keep trying to authenticate in case the users credentials are updated on the
                 // veSync servers,
                 // to match the binding's configuration.
@@ -216,12 +239,12 @@ public class VeSyncBridgeHandler extends BaseBridgeHandler implements VeSyncClie
     @Override
     public void dispose() {
         setBackgroundScanInterval(DEFAULT_DEVICE_SCAN_DISABLED);
-        api.setHttpClient(null);
+        api.dispose();
     }
 
     @Override
     public void handleCommand(ChannelUID channelUID, Command command) {
-        logger.warn("Handling command for VeSync bridge handler.");
+        logger.warn("{}", getLocalizedText("warning.bridge.unexpected-command-call"));
     }
 
     public void handleNewUserSession(final @Nullable VeSyncUserSession userSessionData) {
@@ -234,6 +257,7 @@ public class VeSyncBridgeHandler extends BaseBridgeHandler implements VeSyncClie
         this.updateProperties(newProps);
     }
 
+    @Override
     public String reqV2Authorized(final String url, final String macId, final VeSyncAuthenticatedRequest requestData)
             throws AuthenticationException, DeviceUnknownException {
         return api.reqV2Authorized(url, macId, requestData);

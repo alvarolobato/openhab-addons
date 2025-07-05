@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2010-2022 Contributors to the openHAB project
+ * Copyright (c) 2010-2024 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -20,6 +20,8 @@ import org.openhab.core.automation.annotation.RuleAction;
 import org.openhab.core.thing.binding.ThingActions;
 import org.openhab.core.thing.binding.ThingActionsScope;
 import org.openhab.core.thing.binding.ThingHandler;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.ServiceScope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,6 +30,7 @@ import org.slf4j.LoggerFactory;
  *
  * @author Tom Deckers - Initial contribution
  */
+@Component(scope = ServiceScope.PROTOTYPE, service = WebexTeamsActions.class)
 @ThingActionsScope(name = "webexteams")
 @NonNullByDefault
 public class WebexTeamsActions implements ThingActions {
@@ -36,7 +39,7 @@ public class WebexTeamsActions implements ThingActions {
     private @Nullable WebexTeamsHandler handler;
 
     @RuleAction(label = "@text/sendMessageActionLabel", description = "@text/sendMessageActionDescription")
-    public @ActionOutput(name = "success", type = "java.lang.Boolean") Boolean sendMessage(
+    public @ActionOutput(label = "Success", type = "java.lang.Boolean") Boolean sendMessage(
             @ActionInput(name = "text") @Nullable String text) {
         if (text == null) {
             logger.warn("Cannot send Message as text is missing.");
@@ -53,7 +56,7 @@ public class WebexTeamsActions implements ThingActions {
     }
 
     @RuleAction(label = "@text/sendMessageAttActionLabel", description = "@text/sendMessageAttActionDescription")
-    public @ActionOutput(name = "success", type = "java.lang.Boolean") Boolean sendMessage(
+    public @ActionOutput(label = "Success", type = "java.lang.Boolean") Boolean sendMessage(
             @ActionInput(name = "text") @Nullable String text, @ActionInput(name = "attach") @Nullable String attach) {
         if (text == null) {
             logger.warn("Cannot send Message as text is missing.");
@@ -74,7 +77,7 @@ public class WebexTeamsActions implements ThingActions {
     }
 
     @RuleAction(label = "@text/sendRoomMessageActionLabel", description = "@text/sendRoomMessageActionDescription")
-    public @ActionOutput(name = "success", type = "java.lang.Boolean") Boolean sendRoomMessage(
+    public @ActionOutput(label = "Success", type = "java.lang.Boolean") Boolean sendRoomMessage(
             @ActionInput(name = "roomId") @Nullable String roomId, @ActionInput(name = "text") @Nullable String text) {
         if (text == null) {
             logger.warn("Cannot send Message as text is missing.");
@@ -95,7 +98,7 @@ public class WebexTeamsActions implements ThingActions {
     }
 
     @RuleAction(label = "@text/sendRoomMessageAttActionLabel", description = "@text/sendRoomMessageAttActionDescription")
-    public @ActionOutput(name = "success", type = "java.lang.Boolean") Boolean sendRoomMessage(
+    public @ActionOutput(label = "Success", type = "java.lang.Boolean") Boolean sendRoomMessage(
             @ActionInput(name = "roomId") @Nullable String roomId, @ActionInput(name = "text") @Nullable String text,
             @ActionInput(name = "attach") @Nullable String attach) {
         if (text == null) {
@@ -120,7 +123,7 @@ public class WebexTeamsActions implements ThingActions {
     }
 
     @RuleAction(label = "@text/sendPersonMessageActionLabel", description = "@text/sendPersonMessageActionDescription")
-    public @ActionOutput(name = "success", type = "java.lang.Boolean") Boolean sendPersonMessage(
+    public @ActionOutput(label = "Success", type = "java.lang.Boolean") Boolean sendPersonMessage(
             @ActionInput(name = "personEmail") @Nullable String personEmail,
             @ActionInput(name = "text") @Nullable String text) {
         if (text == null) {
@@ -142,7 +145,7 @@ public class WebexTeamsActions implements ThingActions {
     }
 
     @RuleAction(label = "@text/sendPersonMessageAttActionLabel", description = "@text/sendPersonMessageAttActionDescription")
-    public @ActionOutput(name = "success", type = "java.lang.Boolean") Boolean sendPersonMessage(
+    public @ActionOutput(label = "Success", type = "java.lang.Boolean") Boolean sendPersonMessage(
             @ActionInput(name = "personEmail") @Nullable String personEmail,
             @ActionInput(name = "text") @Nullable String text, @ActionInput(name = "attach") @Nullable String attach) {
         if (text == null) {
@@ -168,16 +171,16 @@ public class WebexTeamsActions implements ThingActions {
     }
 
     public static boolean sendMessage(@Nullable ThingActions actions, @Nullable String text) {
-        if (actions instanceof WebexTeamsActions) {
-            return ((WebexTeamsActions) actions).sendMessage(text);
+        if (actions instanceof WebexTeamsActions teamsActions) {
+            return teamsActions.sendMessage(text);
         } else {
             throw new IllegalArgumentException("Instance is not a WebexTeamsActions class.");
         }
     }
 
     public static boolean sendMessage(@Nullable ThingActions actions, @Nullable String text, @Nullable String attach) {
-        if (actions instanceof WebexTeamsActions) {
-            return ((WebexTeamsActions) actions).sendMessage(text, attach);
+        if (actions instanceof WebexTeamsActions teamsActions) {
+            return teamsActions.sendMessage(text, attach);
         } else {
             throw new IllegalArgumentException("Instance is not a WebexTeamsActions class.");
         }
@@ -185,8 +188,8 @@ public class WebexTeamsActions implements ThingActions {
 
     public static boolean sendRoomMessage(@Nullable ThingActions actions, @Nullable String roomId,
             @Nullable String text) {
-        if (actions instanceof WebexTeamsActions) {
-            return ((WebexTeamsActions) actions).sendRoomMessage(roomId, text);
+        if (actions instanceof WebexTeamsActions teamsActions) {
+            return teamsActions.sendRoomMessage(roomId, text);
         } else {
             throw new IllegalArgumentException("Instance is not a WebexTeamsActions class.");
         }
@@ -194,8 +197,8 @@ public class WebexTeamsActions implements ThingActions {
 
     public static boolean sendRoomMessage(@Nullable ThingActions actions, @Nullable String roomId,
             @Nullable String text, @Nullable String attach) {
-        if (actions instanceof WebexTeamsActions) {
-            return ((WebexTeamsActions) actions).sendRoomMessage(roomId, text, attach);
+        if (actions instanceof WebexTeamsActions teamsActions) {
+            return teamsActions.sendRoomMessage(roomId, text, attach);
         } else {
             throw new IllegalArgumentException("Instance is not a WebexTeamsActions class.");
         }
@@ -203,8 +206,8 @@ public class WebexTeamsActions implements ThingActions {
 
     public static boolean sendPersonMessage(@Nullable ThingActions actions, @Nullable String personEmail,
             @Nullable String text) {
-        if (actions instanceof WebexTeamsActions) {
-            return ((WebexTeamsActions) actions).sendPersonMessage(personEmail, text);
+        if (actions instanceof WebexTeamsActions teamsActions) {
+            return teamsActions.sendPersonMessage(personEmail, text);
         } else {
             throw new IllegalArgumentException("Instance is not a WebexTeamsActions class.");
         }
@@ -212,8 +215,8 @@ public class WebexTeamsActions implements ThingActions {
 
     public static boolean sendPersonMessage(@Nullable ThingActions actions, @Nullable String personEmail,
             @Nullable String text, @Nullable String attach) {
-        if (actions instanceof WebexTeamsActions) {
-            return ((WebexTeamsActions) actions).sendPersonMessage(personEmail, text, attach);
+        if (actions instanceof WebexTeamsActions teamsActions) {
+            return teamsActions.sendPersonMessage(personEmail, text, attach);
         } else {
             throw new IllegalArgumentException("Instance is not a WebexTeamsActions class.");
         }
@@ -221,8 +224,8 @@ public class WebexTeamsActions implements ThingActions {
 
     @Override
     public void setThingHandler(@Nullable ThingHandler handler) {
-        if (handler instanceof WebexTeamsHandler) {
-            this.handler = (WebexTeamsHandler) handler;
+        if (handler instanceof WebexTeamsHandler teamsHandler) {
+            this.handler = teamsHandler;
         }
     }
 

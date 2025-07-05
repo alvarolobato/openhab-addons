@@ -151,7 +151,7 @@ The following channels are available on the Ecobee Thermostat.
 | runtime | connected | Switch |     | Connected |
 | runtime | firstConnected | DateTime |     | First Connected |
 | runtime | connectDateTime | DateTime |     | Connected Date Time |
-| runtime | disconnectDateTime | DateTime |     | Disconnected Date Timee |
+| runtime | disconnectDateTime | DateTime |     | Disconnected Date Time |
 | runtime | lastModified | DateTime |     | Last Modified |
 | runtime | lastStatusModified | DateTime |     | Last Status Modified |
 | runtime | runtimeDate | String |     | Runtime Date |
@@ -1176,7 +1176,7 @@ Switch SetTemperatureHold "Set Temperature Hold [%s]"
 Number:Temperature UserCool "User Selected Heat [%.1f %unit%]"
 Number:Temperature UserHeat "User Selected Cool [%.1f %unit%]"
 String UserClimateRef "User Climate Ref [%s]"
-String SendMessage "Send an Message [%s]"
+String SendMessage "Send a Message [%s]"
 String AcknowledgeAlert "Acknowledge An Alert [%s]"
 Switch GetAlerts "Get All Alerts [%s]"
 Switch GetEvents "Get All Events [%s]"

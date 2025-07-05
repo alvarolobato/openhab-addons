@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2010-2022 Contributors to the openHAB project
+ * Copyright (c) 2010-2024 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -153,7 +153,8 @@ public class ICalendarHandler extends BaseBridgeHandler implements CalendarUpdat
             final int maxSize = maxSizeBD.intValue();
             try {
                 regularPull = new PullJob(httpClient, new URI(currentConfiguration.url), currentConfiguration.username,
-                        currentConfiguration.password, calendarFile, maxSize * 1048576, this);
+                        currentConfiguration.password, calendarFile, maxSize * 1048576, this,
+                        currentConfiguration.userAgent);
             } catch (URISyntaxException e) {
                 throw new ConfigBrokenException(String.format(
                         "The URI '%s' for downloading the calendar contains syntax errors.", currentConfiguration.url));
@@ -451,10 +452,10 @@ public class ICalendarHandler extends BaseBridgeHandler implements CalendarUpdat
      * @param childHandler the handler to be updated
      */
     private void updateChild(@Nullable ThingHandler childHandler) {
-        if (childHandler instanceof CalendarUpdateListener) {
+        if (childHandler instanceof CalendarUpdateListener updateListener) {
             logger.trace("Notifying {} about fresh calendar.", childHandler.getThing().getUID());
             try {
-                ((CalendarUpdateListener) childHandler).onCalendarUpdated();
+                updateListener.onCalendarUpdated();
             } catch (Exception e) {
                 logger.trace("The update of a child handler failed. Ignoring.", e);
             }

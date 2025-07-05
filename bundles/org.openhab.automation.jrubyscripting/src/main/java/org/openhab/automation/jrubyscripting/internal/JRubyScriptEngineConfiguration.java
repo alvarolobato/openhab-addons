@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2010-2022 Contributors to the openHAB project
+ * Copyright (c) 2010-2024 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -59,6 +59,7 @@ public class JRubyScriptEngineConfiguration {
     private static final String GEMS_CONFIG_KEY = "gems";
     private static final String REQUIRE_CONFIG_KEY = "require";
     private static final String CHECK_UPDATE_CONFIG_KEY = "check_update";
+    private static final String DEPENDENCY_TRACKING_CONFIG_KEY = "dependency_tracking";
 
     // Map of configuration parameters
     private final Map<String, OptionalConfigurationElement> configurationParameters = Map.ofEntries(
@@ -78,11 +79,13 @@ public class JRubyScriptEngineConfiguration {
                     new OptionalConfigurationElement(OptionalConfigurationElement.Type.RUBY_ENVIRONMENT,
                             DEFAULT_RUBYLIB, "RUBYLIB")),
 
-            Map.entry(GEMS_CONFIG_KEY, new OptionalConfigurationElement("")),
+            Map.entry(GEMS_CONFIG_KEY, new OptionalConfigurationElement("openhab-scripting=~>5.0")),
 
-            Map.entry(REQUIRE_CONFIG_KEY, new OptionalConfigurationElement("")),
+            Map.entry(REQUIRE_CONFIG_KEY, new OptionalConfigurationElement("openhab/dsl")),
 
-            Map.entry(CHECK_UPDATE_CONFIG_KEY, new OptionalConfigurationElement("true")));
+            Map.entry(CHECK_UPDATE_CONFIG_KEY, new OptionalConfigurationElement("true")),
+
+            Map.entry(DEPENDENCY_TRACKING_CONFIG_KEY, new OptionalConfigurationElement("true")));
 
     /**
      * Update configuration
@@ -271,7 +274,7 @@ public class JRubyScriptEngineConfiguration {
     /**
      * Configure the optional elements of the Ruby Environment
      * 
-     * @param engine Engine in which to configure environment
+     * @param scriptEngine Engine in which to configure environment
      */
     public void configureRubyEnvironment(ScriptEngine scriptEngine) {
         getConfigurationElements(OptionalConfigurationElement.Type.RUBY_ENVIRONMENT).forEach(configElement -> {
@@ -297,6 +300,8 @@ public class JRubyScriptEngineConfiguration {
         });
 
         configureRubyLib(scriptEngine);
+        disallowExec(scriptEngine);
+        configureOpenHABGem(scriptEngine);
     }
 
     /**
@@ -319,12 +324,58 @@ public class JRubyScriptEngineConfiguration {
         }
     }
 
+    private void disallowExec(ScriptEngine engine) {
+        try {
+            engine.eval("""
+                      def Process.exec(*)
+                        raise NotImplementedError, "You cannot call `exec` from within openHAB"
+                      end
+
+                      module Kernel
+                        module_function def exec(*)
+                          raise NotImplementedError, "You cannot call `exec` from within openHAB"
+                        end
+                      end
+                    """);
+        } catch (ScriptException exception) {
+            logger.warn("Error preventing exec", unwrap(exception));
+        }
+    }
+
+    private void configureOpenHABGem(ScriptEngine engine) {
+        try {
+            engine.eval("""
+                    openhab_spec = Gem::Specification.new do |s|
+                      s.name    = "openhab"
+                      s.version = org.openhab.core.OpenHAB.version.freeze
+
+                      def s.deleted_gem?
+                        false
+                      end
+
+                      def s.installation_missing?
+                        false
+                      end
+                    end
+
+                    Gem::Specification.add_spec(openhab_spec)
+                    Gem.post_reset { Gem::Specification.add_spec(openhab_spec) }
+                    """);
+        } catch (ScriptException exception) {
+            logger.warn("Error creating openHAB gem", unwrap(exception));
+        }
+    }
+
     public List<String> getRubyLibPaths() {
         String rubyLib = get(RUBYLIB_CONFIG_KEY);
         if (rubyLib.isEmpty()) {
             return List.of();
         }
         return List.of(rubyLib.split(File.pathSeparator));
+    }
+
+    public boolean enableDependencyTracking() {
+        return "true".equals(get(DEPENDENCY_TRACKING_CONFIG_KEY));
     }
 
     /**
@@ -372,7 +423,7 @@ public class JRubyScriptEngineConfiguration {
         private final String defaultValue;
         private final Optional<String> mappedTo;
         private final Type type;
-        private Optional<String> value;
+        private @Nullable String value;
 
         private OptionalConfigurationElement(String defaultValue) {
             this(Type.OTHER, defaultValue, null);
@@ -382,19 +433,19 @@ public class JRubyScriptEngineConfiguration {
             this.type = type;
             this.defaultValue = defaultValue;
             this.mappedTo = Optional.ofNullable(mappedTo);
-            value = Optional.empty();
         }
 
         private String getValue() {
-            return value.orElse(defaultValue);
+            String value = this.value;
+            return value != null ? value : this.defaultValue;
         }
 
-        private void setValue(String value) {
-            this.value = Optional.of(value);
+        private void setValue(@Nullable String value) {
+            this.value = value;
         }
 
         private void clearValue() {
-            this.value = Optional.empty();
+            this.value = null;
         }
 
         private Optional<String> mappedTo() {

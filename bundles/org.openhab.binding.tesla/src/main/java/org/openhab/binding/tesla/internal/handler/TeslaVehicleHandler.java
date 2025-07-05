@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2010-2022 Contributors to the openHAB project
+ * Copyright (c) 2010-2024 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -23,7 +23,9 @@ import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -36,22 +38,26 @@ import javax.ws.rs.client.WebTarget;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.tesla.internal.TeslaBindingConstants;
 import org.openhab.binding.tesla.internal.TeslaBindingConstants.EventKeys;
 import org.openhab.binding.tesla.internal.TeslaChannelSelectorProxy;
 import org.openhab.binding.tesla.internal.TeslaChannelSelectorProxy.TeslaChannelSelector;
 import org.openhab.binding.tesla.internal.handler.TeslaAccountHandler.Request;
-import org.openhab.binding.tesla.internal.protocol.ChargeState;
-import org.openhab.binding.tesla.internal.protocol.ClimateState;
-import org.openhab.binding.tesla.internal.protocol.DriveState;
-import org.openhab.binding.tesla.internal.protocol.Event;
-import org.openhab.binding.tesla.internal.protocol.GUIState;
-import org.openhab.binding.tesla.internal.protocol.Vehicle;
-import org.openhab.binding.tesla.internal.protocol.VehicleState;
+import org.openhab.binding.tesla.internal.protocol.dto.ChargeState;
+import org.openhab.binding.tesla.internal.protocol.dto.ClimateState;
+import org.openhab.binding.tesla.internal.protocol.dto.DriveState;
+import org.openhab.binding.tesla.internal.protocol.dto.Event;
+import org.openhab.binding.tesla.internal.protocol.dto.GUIState;
+import org.openhab.binding.tesla.internal.protocol.dto.SoftwareUpdate;
+import org.openhab.binding.tesla.internal.protocol.dto.Vehicle;
+import org.openhab.binding.tesla.internal.protocol.dto.VehicleData;
+import org.openhab.binding.tesla.internal.protocol.dto.VehicleState;
 import org.openhab.binding.tesla.internal.throttler.QueueChannelThrottler;
 import org.openhab.binding.tesla.internal.throttler.Rate;
 import org.openhab.core.io.net.http.WebSocketFactory;
+import org.openhab.core.library.types.DateTimeType;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.library.types.IncreaseDecreaseType;
 import org.openhab.core.library.types.OnOffType;
@@ -60,6 +66,7 @@ import org.openhab.core.library.types.QuantityType;
 import org.openhab.core.library.types.StringType;
 import org.openhab.core.library.unit.SIUnits;
 import org.openhab.core.library.unit.Units;
+import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
@@ -84,9 +91,9 @@ import com.google.gson.JsonParser;
  * @author Karel Goderis - Initial contribution
  * @author Kai Kreuzer - Refactored to use separate account handler and improved configuration options
  */
+@NonNullByDefault
 public class TeslaVehicleHandler extends BaseThingHandler {
 
-    private static final int FAST_STATUS_REFRESH_INTERVAL = 15000;
     private static final int SLOW_STATUS_REFRESH_INTERVAL = 60000;
     private static final int API_SLEEP_INTERVAL_MINUTES = 20;
     private static final int MOVE_THRESHOLD_INTERVAL_MINUTES_DEFAULT = 5;
@@ -101,13 +108,22 @@ public class TeslaVehicleHandler extends BaseThingHandler {
     private final Logger logger = LoggerFactory.getLogger(TeslaVehicleHandler.class);
 
     // Vehicle state variables
+    @Nullable
     protected Vehicle vehicle;
+    @Nullable
     protected String vehicleJSON;
+    @Nullable
     protected DriveState driveState;
+    @Nullable
     protected GUIState guiState;
+    @Nullable
     protected VehicleState vehicleState;
+    @Nullable
     protected ChargeState chargeState;
+    @Nullable
     protected ClimateState climateState;
+    @Nullable
+    protected SoftwareUpdate softwareUpdate;
 
     protected boolean allowWakeUp;
     protected boolean allowWakeUpForCommands;
@@ -122,7 +138,7 @@ public class TeslaVehicleHandler extends BaseThingHandler {
     protected long eventIntervalTimestamp;
     protected int eventIntervalErrors;
     protected int inactivity = MOVE_THRESHOLD_INTERVAL_MINUTES_DEFAULT;
-    protected ReentrantLock lock;
+    protected ReentrantLock lock = new ReentrantLock();
 
     protected double lastLongitude;
     protected double lastLatitude;
@@ -135,14 +151,13 @@ public class TeslaVehicleHandler extends BaseThingHandler {
     protected String lastState = "";
     protected boolean isInactive = false;
 
-    protected TeslaAccountHandler account;
+    protected @NonNullByDefault({}) TeslaAccountHandler account;
 
-    protected QueueChannelThrottler stateThrottler;
-    protected TeslaChannelSelectorProxy teslaChannelSelectorProxy = new TeslaChannelSelectorProxy();
-    protected Thread eventThread;
-    protected ScheduledFuture<?> fastStateJob;
-    protected ScheduledFuture<?> slowStateJob;
+    protected @Nullable QueueChannelThrottler stateThrottler;
+    protected @Nullable Thread eventThread;
+    protected @Nullable ScheduledFuture<?> stateJob;
     protected WebSocketFactory webSocketFactory;
+    protected TeslaChannelSelectorProxy teslaChannelSelectorProxy = new TeslaChannelSelectorProxy();
 
     private final Gson gson = new Gson();
 
@@ -151,79 +166,62 @@ public class TeslaVehicleHandler extends BaseThingHandler {
         this.webSocketFactory = webSocketFactory;
     }
 
-    @SuppressWarnings("null")
     @Override
     public void initialize() {
         logger.trace("Initializing the Tesla handler for {}", getThing().getUID());
         updateStatus(ThingStatus.UNKNOWN);
+
         allowWakeUp = (boolean) getConfig().get(TeslaBindingConstants.CONFIG_ALLOWWAKEUP);
         allowWakeUpForCommands = (boolean) getConfig().get(TeslaBindingConstants.CONFIG_ALLOWWAKEUPFORCOMMANDS);
         enableEvents = (boolean) getConfig().get(TeslaBindingConstants.CONFIG_ENABLEEVENTS);
-        Number inactivityParam = (Number) getConfig().get(TeslaBindingConstants.CONFIG_INACTIVITY);
-        inactivity = inactivityParam == null ? MOVE_THRESHOLD_INTERVAL_MINUTES_DEFAULT : inactivityParam.intValue();
-        Boolean useDriveStateParam = (boolean) getConfig().get(TeslaBindingConstants.CONFIG_USEDRIVESTATE);
-        useDriveState = useDriveStateParam == null ? false : useDriveStateParam;
-        Boolean useAdvancedStatesParam = (boolean) getConfig().get(TeslaBindingConstants.CONFIG_USEDADVANCEDSTATES);
-        useAdvancedStates = useAdvancedStatesParam == null ? false : useAdvancedStatesParam;
 
-        account = (TeslaAccountHandler) getBridge().getHandler();
+        inactivity = Objects.requireNonNullElse((Number) getConfig().get(TeslaBindingConstants.CONFIG_INACTIVITY),
+                MOVE_THRESHOLD_INTERVAL_MINUTES_DEFAULT).intValue();
+        useDriveState = Objects
+                .requireNonNullElse((boolean) getConfig().get(TeslaBindingConstants.CONFIG_USEDRIVESTATE), false);
+        useAdvancedStates = Objects
+                .requireNonNullElse((boolean) getConfig().get(TeslaBindingConstants.CONFIG_USEDADVANCEDSTATES), false);
+        Bridge bridge = getBridge();
+        if (bridge == null || !(bridge.getHandler() instanceof TeslaAccountHandler teslaAccountHandler)) {
+            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_UNINITIALIZED);
+            return;
+        }
+        account = teslaAccountHandler;
         lock = new ReentrantLock();
-        scheduler.execute(() -> queryVehicleAndUpdate());
+        scheduler.execute(this::queryVehicleAndUpdate);
 
-        lock.lock();
-        try {
-            Map<Object, Rate> channels = new HashMap<>();
-            channels.put(DATA_THROTTLE, new Rate(1, 1, TimeUnit.SECONDS));
-            channels.put(COMMAND_THROTTLE, new Rate(20, 1, TimeUnit.MINUTES));
+        Map<Object, Rate> channels = new HashMap<>();
+        channels.put(DATA_THROTTLE, new Rate(1, 1, TimeUnit.SECONDS));
+        channels.put(COMMAND_THROTTLE, new Rate(20, 1, TimeUnit.MINUTES));
 
-            Rate firstRate = new Rate(20, 1, TimeUnit.MINUTES);
-            Rate secondRate = new Rate(200, 10, TimeUnit.MINUTES);
-            stateThrottler = new QueueChannelThrottler(firstRate, scheduler, channels);
-            stateThrottler.addRate(secondRate);
+        Rate firstRate = new Rate(20, 1, TimeUnit.MINUTES);
+        Rate secondRate = new Rate(200, 10, TimeUnit.MINUTES);
+        QueueChannelThrottler stateThrottler = new QueueChannelThrottler(firstRate, scheduler, channels);
+        stateThrottler.addRate(secondRate);
+        this.stateThrottler = stateThrottler;
+        stateJob = scheduler.scheduleWithFixedDelay(stateRunnable, 0, SLOW_STATUS_REFRESH_INTERVAL,
+                TimeUnit.MILLISECONDS);
 
-            if (fastStateJob == null || fastStateJob.isCancelled()) {
-                fastStateJob = scheduler.scheduleWithFixedDelay(fastStateRunnable, 0, FAST_STATUS_REFRESH_INTERVAL,
-                        TimeUnit.MILLISECONDS);
-            }
-
-            if (slowStateJob == null || slowStateJob.isCancelled()) {
-                slowStateJob = scheduler.scheduleWithFixedDelay(slowStateRunnable, 0, SLOW_STATUS_REFRESH_INTERVAL,
-                        TimeUnit.MILLISECONDS);
-            }
-
-            if (enableEvents) {
-                if (eventThread == null) {
-                    eventThread = new Thread(eventRunnable, "openHAB-Tesla-Events-" + getThing().getUID());
-                    eventThread.start();
-                }
-            }
-
-        } finally {
-            lock.unlock();
+        if (enableEvents) {
+            Thread eventThread = new Thread(eventRunnable, "OH-binding-" + getThing().getUID() + "-events");
+            eventThread.start();
+            this.eventThread = eventThread;
         }
     }
 
     @Override
     public void dispose() {
         logger.trace("Disposing the Tesla handler for {}", getThing().getUID());
-        lock.lock();
-        try {
-            if (fastStateJob != null && !fastStateJob.isCancelled()) {
-                fastStateJob.cancel(true);
-                fastStateJob = null;
-            }
 
-            if (slowStateJob != null && !slowStateJob.isCancelled()) {
-                slowStateJob.cancel(true);
-                slowStateJob = null;
-            }
-
-            if (eventThread != null && !eventThread.isInterrupted()) {
-                eventThread.interrupt();
-                eventThread = null;
-            }
-        } finally {
-            lock.unlock();
+        ScheduledFuture<?> stateJob = this.stateJob;
+        if (stateJob != null && !stateJob.isCancelled()) {
+            stateJob.cancel(true);
+            this.stateJob = null;
+        }
+        Thread eventThread = this.eventThread;
+        if (eventThread != null && !eventThread.isInterrupted()) {
+            eventThread.interrupt();
+            this.eventThread = null;
         }
     }
 
@@ -232,7 +230,8 @@ public class TeslaVehicleHandler extends BaseThingHandler {
      *
      * @return the vehicle id
      */
-    public String getVehicleId() {
+    public @Nullable String getVehicleId() {
+        Vehicle vehicle = this.vehicle;
         if (vehicle != null) {
             return vehicle.id;
         } else {
@@ -255,222 +254,222 @@ public class TeslaVehicleHandler extends BaseThingHandler {
             setActive();
 
             // Request the state of all known variables. This is sub-optimal, but the requests get scheduled and
-            // throttled so we are safe not to break the Tesla SLA
+            // throbridgettled so we are safe not to break the Tesla SLA
             requestAllData();
         } else {
-            if (selector != null) {
-                if (!isAwake() && allowWakeUpForCommands) {
-                    logger.debug("Waking vehicle to send command.");
-                    wakeUp();
-                    setActive();
-                }
-                try {
-                    switch (selector) {
-                        case CHARGE_LIMIT_SOC: {
-                            if (command instanceof PercentType) {
-                                setChargeLimit(((PercentType) command).intValue());
-                            } else if (command instanceof OnOffType && command == OnOffType.ON) {
-                                setChargeLimit(100);
-                            } else if (command instanceof OnOffType && command == OnOffType.OFF) {
-                                setChargeLimit(0);
-                            } else if (command instanceof IncreaseDecreaseType
-                                    && command == IncreaseDecreaseType.INCREASE) {
-                                setChargeLimit(Math.min(chargeState.charge_limit_soc + 1, 100));
-                            } else if (command instanceof IncreaseDecreaseType
-                                    && command == IncreaseDecreaseType.DECREASE) {
-                                setChargeLimit(Math.max(chargeState.charge_limit_soc - 1, 0));
+            if (!isAwake() && allowWakeUpForCommands) {
+                logger.debug("Waking vehicle to send command.");
+                wakeUp();
+                setActive();
+            }
+            try {
+                switch (selector) {
+                    case CHARGE_LIMIT_SOC: {
+                        if (command instanceof PercentType percentCommand) {
+                            setChargeLimit(percentCommand.intValue());
+                        } else if (command instanceof OnOffType && command == OnOffType.ON) {
+                            setChargeLimit(100);
+                        } else if (command instanceof OnOffType && command == OnOffType.OFF) {
+                            setChargeLimit(0);
+                        } else if (command instanceof IncreaseDecreaseType
+                                && command == IncreaseDecreaseType.INCREASE) {
+                            ChargeState chargeState = this.chargeState;
+                            if (chargeState != null) {
+                                setChargeLimit(Math.min(chargeState.chargeLimitSoc + 1, 100));
                             }
-                            break;
+                        } else if (command instanceof IncreaseDecreaseType
+                                && command == IncreaseDecreaseType.DECREASE) {
+                            ChargeState chargeState = this.chargeState;
+                            if (chargeState != null) {
+                                setChargeLimit(Math.max(chargeState.chargeLimitSoc - 1, 0));
+                            }
                         }
-                        case CHARGE_AMPS:
-                            Integer amps = null;
-                            if (command instanceof DecimalType) {
-                                amps = ((DecimalType) command).intValue();
-                            }
-                            if (command instanceof QuantityType<?>) {
-                                QuantityType<?> qamps = ((QuantityType<?>) command).toUnit(Units.AMPERE);
-                                if (qamps != null) {
-                                    amps = qamps.intValue();
-                                }
-                            }
-                            if (amps != null) {
-                                if (amps < 5 || amps > 32) {
-                                    logger.warn("Charging amps can only be set in a range of 5-32A, but not to {}A.",
-                                            amps);
-                                    return;
-                                }
-                                setChargingAmps(amps);
-                            }
-                            break;
-                        case COMBINED_TEMP: {
-                            QuantityType<Temperature> quantity = commandToQuantityType(command);
-                            if (quantity != null) {
-                                setCombinedTemperature(quanityToRoundedFloat(quantity));
-                            }
-                            break;
-                        }
-                        case DRIVER_TEMP: {
-                            QuantityType<Temperature> quantity = commandToQuantityType(command);
-                            if (quantity != null) {
-                                setDriverTemperature(quanityToRoundedFloat(quantity));
-                            }
-                            break;
-                        }
-                        case PASSENGER_TEMP: {
-                            QuantityType<Temperature> quantity = commandToQuantityType(command);
-                            if (quantity != null) {
-                                setPassengerTemperature(quanityToRoundedFloat(quantity));
-                            }
-                            break;
-                        }
-                        case SENTRY_MODE: {
-                            if (command instanceof OnOffType) {
-                                setSentryMode(command == OnOffType.ON);
-                            }
-                            break;
-                        }
-                        case SUN_ROOF_STATE: {
-                            if (command instanceof StringType) {
-                                setSunroof(command.toString());
-                            }
-                            break;
-                        }
-                        case CHARGE_TO_MAX: {
-                            if (command instanceof OnOffType) {
-                                if (((OnOffType) command) == OnOffType.ON) {
-                                    setMaxRangeCharging(true);
-                                } else {
-                                    setMaxRangeCharging(false);
-                                }
-                            }
-                            break;
-                        }
-                        case CHARGE: {
-                            if (command instanceof OnOffType) {
-                                if (((OnOffType) command) == OnOffType.ON) {
-                                    charge(true);
-                                } else {
-                                    charge(false);
-                                }
-                            }
-                            break;
-                        }
-                        case FLASH: {
-                            if (command instanceof OnOffType) {
-                                if (((OnOffType) command) == OnOffType.ON) {
-                                    flashLights();
-                                }
-                            }
-                            break;
-                        }
-                        case HONK_HORN: {
-                            if (command instanceof OnOffType) {
-                                if (((OnOffType) command) == OnOffType.ON) {
-                                    honkHorn();
-                                }
-                            }
-                            break;
-                        }
-                        case CHARGEPORT: {
-                            if (command instanceof OnOffType) {
-                                if (((OnOffType) command) == OnOffType.ON) {
-                                    openChargePort();
-                                }
-                            }
-                            break;
-                        }
-                        case DOOR_LOCK: {
-                            if (command instanceof OnOffType) {
-                                if (((OnOffType) command) == OnOffType.ON) {
-                                    lockDoors(true);
-                                } else {
-                                    lockDoors(false);
-                                }
-                            }
-                            break;
-                        }
-                        case AUTO_COND: {
-                            if (command instanceof OnOffType) {
-                                if (((OnOffType) command) == OnOffType.ON) {
-                                    autoConditioning(true);
-                                } else {
-                                    autoConditioning(false);
-                                }
-                            }
-                            break;
-                        }
-                        case WAKEUP: {
-                            if (command instanceof OnOffType) {
-                                if (((OnOffType) command) == OnOffType.ON) {
-                                    wakeUp();
-                                }
-                            }
-                            break;
-                        }
-                        case FT: {
-                            if (command instanceof OnOffType) {
-                                if (((OnOffType) command) == OnOffType.ON) {
-                                    openFrunk();
-                                }
-                            }
-                            break;
-                        }
-                        case RT: {
-                            if (command instanceof OnOffType) {
-                                if (((OnOffType) command) == OnOffType.ON) {
-                                    if (vehicleState.rt == 0) {
-                                        openTrunk();
-                                    }
-                                } else {
-                                    if (vehicleState.rt == 1) {
-                                        closeTrunk();
-                                    }
-                                }
-                            }
-                            break;
-                        }
-                        case VALET_MODE: {
-                            if (command instanceof OnOffType) {
-                                int valetpin = ((BigDecimal) getConfig().get(VALETPIN)).intValue();
-                                if (((OnOffType) command) == OnOffType.ON) {
-                                    setValetMode(true, valetpin);
-                                } else {
-                                    setValetMode(false, valetpin);
-                                }
-                            }
-                            break;
-                        }
-                        case RESET_VALET_PIN: {
-                            if (command instanceof OnOffType) {
-                                if (((OnOffType) command) == OnOffType.ON) {
-                                    resetValetPin();
-                                }
-                            }
-                            break;
-                        }
-                        case STEERINGWHEEL_HEATER: {
-                            if (command instanceof OnOffType) {
-                                boolean commandBooleanValue = ((OnOffType) command) == OnOffType.ON ? true : false;
-                                setSteeringWheelHeater(commandBooleanValue);
-                            }
-                            break;
-                        }
-                        default:
-                            break;
+                        break;
                     }
-                    return;
-                } catch (IllegalArgumentException e) {
-                    logger.warn(
-                            "An error occurred while trying to set the read-only variable associated with channel '{}' to '{}'",
-                            channelID, command.toString());
+                    case CHARGE_AMPS:
+                        Integer amps = null;
+                        if (command instanceof DecimalType decimalCommand) {
+                            amps = decimalCommand.intValue();
+                        }
+                        if (command instanceof QuantityType<?> quantityCommand) {
+                            QuantityType<?> qamps = quantityCommand.toUnit(Units.AMPERE);
+                            if (qamps != null) {
+                                amps = qamps.intValue();
+                            }
+                        }
+                        if (amps != null) {
+                            if (amps > 32) {
+                                logger.warn("Charging amps cannot be set higher than 32A, {}A was requested", amps);
+                                return;
+                            }
+                            if (amps < 5) {
+                                logger.info("Charging amps should be set higher than 5A to avoid excessive losses.");
+                            }
+                            setChargingAmps(amps);
+                        }
+                        break;
+                    case COMBINED_TEMP: {
+                        QuantityType<Temperature> quantity = commandToQuantityType(command);
+                        setCombinedTemperature(quanityToRoundedFloat(quantity));
+                        break;
+                    }
+                    case DRIVER_TEMP: {
+                        QuantityType<Temperature> quantity = commandToQuantityType(command);
+                        setDriverTemperature(quanityToRoundedFloat(quantity));
+                        break;
+                    }
+                    case PASSENGER_TEMP: {
+                        QuantityType<Temperature> quantity = commandToQuantityType(command);
+                        setPassengerTemperature(quanityToRoundedFloat(quantity));
+                        break;
+                    }
+                    case SENTRY_MODE: {
+                        if (command instanceof OnOffType) {
+                            setSentryMode(command == OnOffType.ON);
+                        }
+                        break;
+                    }
+                    case SUN_ROOF_STATE: {
+                        if (command instanceof StringType) {
+                            setSunroof(command.toString());
+                        }
+                        break;
+                    }
+                    case CHARGE_TO_MAX: {
+                        if (command instanceof OnOffType onOffCommand) {
+                            if (onOffCommand == OnOffType.ON) {
+                                setMaxRangeCharging(true);
+                            } else {
+                                setMaxRangeCharging(false);
+                            }
+                        }
+                        break;
+                    }
+                    case CHARGE: {
+                        if (command instanceof OnOffType onOffCommand) {
+                            if (onOffCommand == OnOffType.ON) {
+                                charge(true);
+                            } else {
+                                charge(false);
+                            }
+                        }
+                        break;
+                    }
+                    case FLASH: {
+                        if (command instanceof OnOffType onOffCommand) {
+                            if (onOffCommand == OnOffType.ON) {
+                                flashLights();
+                            }
+                        }
+                        break;
+                    }
+                    case HONK_HORN: {
+                        if (command instanceof OnOffType onOffCommand) {
+                            if (onOffCommand == OnOffType.ON) {
+                                honkHorn();
+                            }
+                        }
+                        break;
+                    }
+                    case CHARGEPORT: {
+                        if (command instanceof OnOffType onOffCommand) {
+                            if (onOffCommand == OnOffType.ON) {
+                                openChargePort();
+                            }
+                        }
+                        break;
+                    }
+                    case DOOR_LOCK: {
+                        if (command instanceof OnOffType onOffCommand) {
+                            if (onOffCommand == OnOffType.ON) {
+                                lockDoors(true);
+                            } else {
+                                lockDoors(false);
+                            }
+                        }
+                        break;
+                    }
+                    case AUTO_COND: {
+                        if (command instanceof OnOffType onOffCommand) {
+                            if (onOffCommand == OnOffType.ON) {
+                                autoConditioning(true);
+                            } else {
+                                autoConditioning(false);
+                            }
+                        }
+                        break;
+                    }
+                    case WAKEUP: {
+                        if (command instanceof OnOffType onOffCommand) {
+                            if (onOffCommand == OnOffType.ON) {
+                                wakeUp();
+                            }
+                        }
+                        break;
+                    }
+                    case FT: {
+                        if (command instanceof OnOffType onOffCommand) {
+                            if (onOffCommand == OnOffType.ON) {
+                                openFrunk();
+                            }
+                        }
+                        break;
+                    }
+                    case RT: {
+                        if (command instanceof OnOffType onOffCommand) {
+                            VehicleState vehicleState = this.vehicleState;
+                            if (onOffCommand == OnOffType.ON) {
+                                if (vehicleState != null && vehicleState.rt == 0) {
+                                    openTrunk();
+                                }
+                            } else if (vehicleState != null && vehicleState.rt == 1) {
+                                closeTrunk();
+                            }
+                        }
+                        break;
+                    }
+                    case VALET_MODE: {
+                        if (command instanceof OnOffType onOffCommand) {
+                            int valetpin = ((BigDecimal) getConfig().get(VALETPIN)).intValue();
+                            if (onOffCommand == OnOffType.ON) {
+                                setValetMode(true, valetpin);
+                            } else {
+                                setValetMode(false, valetpin);
+                            }
+                        }
+                        break;
+                    }
+                    case RESET_VALET_PIN: {
+                        if (command instanceof OnOffType onOffCommand) {
+                            if (onOffCommand == OnOffType.ON) {
+                                resetValetPin();
+                            }
+                        }
+                        break;
+                    }
+                    case STEERINGWHEEL_HEATER: {
+                        if (command instanceof OnOffType onOffCommand) {
+                            boolean commandBooleanValue = onOffCommand == OnOffType.ON ? true : false;
+                            setSteeringWheelHeater(commandBooleanValue);
+                        }
+                        break;
+                    }
+                    default:
+                        break;
                 }
+                return;
+            } catch (IllegalArgumentException e) {
+                logger.warn(
+                        "An error occurred while trying to set the read-only variable associated with channel '{}' to '{}'",
+                        channelID, command.toString());
             }
         }
     }
 
-    public void sendCommand(String command, String payLoad, WebTarget target) {
-        if (command.equals(COMMAND_WAKE_UP) || isAwake() || allowWakeUpForCommands) {
+    public void sendCommand(String command, @Nullable String payLoad, WebTarget target) {
+        if (COMMAND_WAKE_UP.equals(command) || isAwake() || allowWakeUpForCommands) {
             Request request = account.newRequest(this, command, payLoad, target, allowWakeUpForCommands);
+            QueueChannelThrottler stateThrottler = this.stateThrottler;
             if (stateThrottler != null) {
                 stateThrottler.submit(COMMAND_THROTTLE, request);
             }
@@ -482,8 +481,9 @@ public class TeslaVehicleHandler extends BaseThingHandler {
     }
 
     public void sendCommand(String command, String payLoad) {
-        if (command.equals(COMMAND_WAKE_UP) || isAwake() || allowWakeUpForCommands) {
+        if (COMMAND_WAKE_UP.equals(command) || isAwake() || allowWakeUpForCommands) {
             Request request = account.newRequest(this, command, payLoad, account.commandTarget, allowWakeUpForCommands);
+            QueueChannelThrottler stateThrottler = this.stateThrottler;
             if (stateThrottler != null) {
                 stateThrottler.submit(COMMAND_THROTTLE, request);
             }
@@ -491,17 +491,20 @@ public class TeslaVehicleHandler extends BaseThingHandler {
     }
 
     public void sendCommand(String command, WebTarget target) {
-        if (command.equals(COMMAND_WAKE_UP) || isAwake() || allowWakeUpForCommands) {
+        if (COMMAND_WAKE_UP.equals(command) || isAwake() || allowWakeUpForCommands) {
             Request request = account.newRequest(this, command, "{}", target, allowWakeUpForCommands);
+            QueueChannelThrottler stateThrottler = this.stateThrottler;
             if (stateThrottler != null) {
                 stateThrottler.submit(COMMAND_THROTTLE, request);
             }
         }
     }
 
-    public void requestData(String command, String payLoad) {
-        if (command.equals(COMMAND_WAKE_UP) || isAwake() || allowWakeUpForCommands) {
+    public void requestData(String command, @Nullable String payLoad) {
+        if (COMMAND_WAKE_UP.equals(command) || isAwake()
+                || (!"vehicleData".equals(command) && allowWakeUpForCommands)) {
             Request request = account.newRequest(this, command, payLoad, account.dataRequestTarget, false);
+            QueueChannelThrottler stateThrottler = this.stateThrottler;
             if (stateThrottler != null) {
                 stateThrottler.submit(DATA_THROTTLE, request);
             }
@@ -533,22 +536,20 @@ public class TeslaVehicleHandler extends BaseThingHandler {
     }
 
     public void requestAllData() {
-        requestData(DRIVE_STATE);
-        requestData(VEHICLE_STATE);
-        requestData(CHARGE_STATE);
-        requestData(CLIMATE_STATE);
-        requestData(GUI_STATE);
+        requestData("vehicleData", null);
     }
 
     protected boolean isAwake() {
-        return vehicle != null && "online".equals(vehicle.state) && vehicle.vehicle_id != null;
+        Vehicle vehicle = this.vehicle;
+        return vehicle != null && "online".equals(vehicle.state) && vehicle.vehicleId != null;
     }
 
     protected boolean isInMotion() {
+        DriveState driveState = this.driveState;
         if (driveState != null) {
-            if (driveState.speed != null && driveState.shift_state != null) {
+            if (driveState.speed != null && driveState.shiftState != null) {
                 return !"Undefined".equals(driveState.speed)
-                        && (!"P".equals(driveState.shift_state) || !"Undefined".equals(driveState.shift_state));
+                        && (!"P".equals(driveState.shiftState) || !"Undefined".equals(driveState.shiftState));
             }
         }
         return false;
@@ -563,15 +564,16 @@ public class TeslaVehicleHandler extends BaseThingHandler {
     }
 
     protected boolean isCharging() {
-        return chargeState != null && "Charging".equals(chargeState.charging_state);
+        ChargeState chargeState = this.chargeState;
+        return chargeState != null && "Charging".equals(chargeState.chargingState);
     }
 
     protected boolean notReadyForSleep() {
         boolean status;
         int computedInactivityPeriod = inactivity;
-
+        VehicleState vehicleState = this.vehicleState;
         if (useAdvancedStates) {
-            if (vehicleState.is_user_present && !isInMotion()) {
+            if (vehicleState != null && vehicleState.isUserPresent && !isInMotion()) {
                 logger.debug("Car is occupied but stationary.");
                 if (lastAdvModesTimestamp < (System.currentTimeMillis()
                         - (THRESHOLD_INTERVAL_FOR_ADVANCED_MINUTES * 60 * 1000))) {
@@ -580,7 +582,7 @@ public class TeslaVehicleHandler extends BaseThingHandler {
                     return (backOffCounter++ % 6 == 0); // using 6 should make sure 1 out of 5 pollers get serviced,
                                                         // about every min.
                 }
-            } else if (vehicleState.sentry_mode) {
+            } else if (vehicleState != null && vehicleState.sentryMode) {
                 logger.debug("Car is in sentry mode.");
                 if (lastAdvModesTimestamp < (System.currentTimeMillis()
                         - (THRESHOLD_INTERVAL_FOR_ADVANCED_MINUTES * 60 * 1000))) {
@@ -588,23 +590,23 @@ public class TeslaVehicleHandler extends BaseThingHandler {
                 } else {
                     return (backOffCounter++ % 6 == 0);
                 }
-            } else if ((vehicleState.center_display_state != 0) && (!isInMotion())) {
+            } else if (vehicleState != null && (vehicleState.centerDisplayState != 0) && (!isInMotion())) {
                 logger.debug("Car is in camp, climate keep, dog, or other mode preventing sleep. Mode {}",
-                        vehicleState.center_display_state);
+                        vehicleState.centerDisplayState);
                 return (backOffCounter++ % 6 == 0);
             } else {
                 lastAdvModesTimestamp = System.currentTimeMillis();
             }
         }
 
-        if (vehicleState.homelink_nearby) {
+        if (vehicleState != null && vehicleState.homelinkNearby) {
             computedInactivityPeriod = MOVE_THRESHOLD_INTERVAL_MINUTES_DEFAULT;
             logger.debug("Car is at home. Movement or drive state threshold is {} min.",
                     MOVE_THRESHOLD_INTERVAL_MINUTES_DEFAULT);
         }
-
+        DriveState driveState = this.driveState;
         if (useDriveState) {
-            if (driveState.shift_state != null) {
+            if (driveState != null && driveState.shiftState != null) {
                 logger.debug("Car drive state not null and not ready to sleep.");
                 return true;
             } else {
@@ -644,13 +646,12 @@ public class TeslaVehicleHandler extends BaseThingHandler {
         lastLongitude = 0;
     }
 
-    protected boolean checkResponse(Response response, boolean immediatelyFail) {
+    protected boolean checkResponse(@Nullable Response response, boolean immediatelyFail) {
         if (response != null && response.getStatus() == 200) {
             return true;
         } else if (response != null && response.getStatus() == 401) {
             logger.debug("The access token has expired, trying to get a new one.");
             account.authenticate();
-            return false;
         } else {
             apiIntervalErrors++;
             if (immediatelyFail || apiIntervalErrors >= TeslaAccountHandler.API_MAXIMUM_ERRORS_IN_INTERVAL) {
@@ -678,29 +679,25 @@ public class TeslaVehicleHandler extends BaseThingHandler {
         JsonObject payloadObject = new JsonObject();
         payloadObject.addProperty("percent", percent);
         sendCommand(COMMAND_SET_CHARGE_LIMIT, gson.toJson(payloadObject), account.commandTarget);
-        requestData(CHARGE_STATE);
     }
 
     public void setChargingAmps(int amps) {
         JsonObject payloadObject = new JsonObject();
         payloadObject.addProperty("charging_amps", amps);
         sendCommand(COMMAND_SET_CHARGING_AMPS, gson.toJson(payloadObject), account.commandTarget);
-        requestData(CHARGE_STATE);
     }
 
     public void setSentryMode(boolean b) {
         JsonObject payloadObject = new JsonObject();
         payloadObject.addProperty("on", b);
         sendCommand(COMMAND_SET_SENTRY_MODE, gson.toJson(payloadObject), account.commandTarget);
-        requestData(VEHICLE_STATE);
     }
 
     public void setSunroof(String state) {
-        if (state.equals("vent") || state.equals("close")) {
+        if ("vent".equals(state) || "close".equals(state)) {
             JsonObject payloadObject = new JsonObject();
             payloadObject.addProperty("state", state);
             sendCommand(COMMAND_SUN_ROOF, gson.toJson(payloadObject), account.commandTarget);
-            requestData(VEHICLE_STATE);
         } else {
             logger.warn("Ignoring invalid command '{}' for sunroof.", state);
         }
@@ -721,7 +718,6 @@ public class TeslaVehicleHandler extends BaseThingHandler {
         payloadObject.addProperty("driver_temp", driverTemperature);
         payloadObject.addProperty("passenger_temp", passenegerTemperature);
         sendCommand(COMMAND_SET_TEMP, gson.toJson(payloadObject), account.commandTarget);
-        requestData(CLIMATE_STATE);
     }
 
     public void setCombinedTemperature(float temperature) {
@@ -729,54 +725,50 @@ public class TeslaVehicleHandler extends BaseThingHandler {
     }
 
     public void setDriverTemperature(float temperature) {
-        setTemperature(temperature, climateState != null ? climateState.passenger_temp_setting : temperature);
+        ClimateState climateState = this.climateState;
+        setTemperature(temperature, climateState != null ? climateState.passengerTempSetting : temperature);
     }
 
     public void setPassengerTemperature(float temperature) {
-        setTemperature(climateState != null ? climateState.driver_temp_setting : temperature, temperature);
+        ClimateState climateState = this.climateState;
+        setTemperature(climateState != null ? climateState.passengerTempSetting : temperature, temperature);
     }
 
     public void openFrunk() {
         JsonObject payloadObject = new JsonObject();
         payloadObject.addProperty("which_trunk", "front");
         sendCommand(COMMAND_ACTUATE_TRUNK, gson.toJson(payloadObject), account.commandTarget);
-        requestData(VEHICLE_STATE);
     }
 
     public void openTrunk() {
         JsonObject payloadObject = new JsonObject();
         payloadObject.addProperty("which_trunk", "rear");
         sendCommand(COMMAND_ACTUATE_TRUNK, gson.toJson(payloadObject), account.commandTarget);
-        requestData(VEHICLE_STATE);
     }
 
     public void closeTrunk() {
         openTrunk();
     }
 
-    public void setValetMode(boolean b, Integer pin) {
+    public void setValetMode(boolean b, @Nullable Integer pin) {
         JsonObject payloadObject = new JsonObject();
         payloadObject.addProperty("on", b);
         if (pin != null) {
             payloadObject.addProperty("password", String.format("%04d", pin));
         }
         sendCommand(COMMAND_SET_VALET_MODE, gson.toJson(payloadObject), account.commandTarget);
-        requestData(VEHICLE_STATE);
     }
 
     public void resetValetPin() {
         sendCommand(COMMAND_RESET_VALET_PIN, account.commandTarget);
-        requestData(VEHICLE_STATE);
     }
 
     public void setMaxRangeCharging(boolean b) {
         sendCommand(b ? COMMAND_CHARGE_MAX : COMMAND_CHARGE_STD, account.commandTarget);
-        requestData(CHARGE_STATE);
     }
 
     public void charge(boolean b) {
         sendCommand(b ? COMMAND_CHARGE_START : COMMAND_CHARGE_STOP, account.commandTarget);
-        requestData(CHARGE_STATE);
     }
 
     public void flashLights() {
@@ -789,17 +781,14 @@ public class TeslaVehicleHandler extends BaseThingHandler {
 
     public void openChargePort() {
         sendCommand(COMMAND_OPEN_CHARGE_PORT, account.commandTarget);
-        requestData(CHARGE_STATE);
     }
 
     public void lockDoors(boolean b) {
         sendCommand(b ? COMMAND_DOOR_LOCK : COMMAND_DOOR_UNLOCK, account.commandTarget);
-        requestData(VEHICLE_STATE);
     }
 
     public void autoConditioning(boolean b) {
         sendCommand(b ? COMMAND_AUTO_COND_START : COMMAND_AUTO_COND_STOP, account.commandTarget);
-        requestData(CLIMATE_STATE);
     }
 
     public void wakeUp() {
@@ -812,37 +801,43 @@ public class TeslaVehicleHandler extends BaseThingHandler {
         sendCommand(COMMAND_STEERING_WHEEL_HEATER, gson.toJson(payloadObject), account.commandTarget);
     }
 
-    protected Vehicle queryVehicle() {
+    protected @Nullable Vehicle queryVehicle() {
         String authHeader = account.getAuthHeader();
 
         if (authHeader != null) {
             try {
                 // get a list of vehicles
-                Response response = account.vehiclesTarget.request(MediaType.APPLICATION_JSON_TYPE)
-                        .header("Authorization", authHeader).get();
+                synchronized (account.productsTarget) {
+                    Response response = account.productsTarget.request(MediaType.APPLICATION_JSON_TYPE)
+                            .header("Authorization", authHeader).get();
 
-                logger.debug("Querying the vehicle, response : {}, {}", response.getStatus(),
-                        response.getStatusInfo().getReasonPhrase());
+                    logger.debug("Querying the vehicle, response : {}, {}", response.getStatus(),
+                            response.getStatusInfo().getReasonPhrase());
 
-                if (!checkResponse(response, true)) {
-                    logger.debug("An error occurred while querying the vehicle");
-                    return null;
-                }
-
-                JsonObject jsonObject = JsonParser.parseString(response.readEntity(String.class)).getAsJsonObject();
-                Vehicle[] vehicleArray = gson.fromJson(jsonObject.getAsJsonArray("response"), Vehicle[].class);
-
-                for (Vehicle vehicle : vehicleArray) {
-                    logger.debug("Querying the vehicle: VIN {}", vehicle.vin);
-                    if (vehicle.vin.equals(getConfig().get(VIN))) {
-                        vehicleJSON = gson.toJson(vehicle);
-                        parseAndUpdate("queryVehicle", null, vehicleJSON);
-                        if (logger.isTraceEnabled()) {
-                            logger.trace("Vehicle is id {}/vehicle_id {}/tokens {}", vehicle.id, vehicle.vehicle_id,
-                                    vehicle.tokens);
-                        }
-                        return vehicle;
+                    if (!checkResponse(response, true)) {
+                        logger.debug("An error occurred while querying the vehicle");
+                        return null;
                     }
+
+                    JsonObject jsonObject = JsonParser.parseString(response.readEntity(String.class)).getAsJsonObject();
+                    Vehicle[] vehicleArray = gson.fromJson(jsonObject.getAsJsonArray("response"), Vehicle[].class);
+                    if (vehicleArray == null) {
+                        logger.debug("Response resulted in unexpected null array");
+                        return null;
+                    }
+                    for (Vehicle vehicle : vehicleArray) {
+                        logger.debug("Querying the vehicle: VIN {}", vehicle.vin);
+                        if (vehicle.vin.equals(getConfig().get(VIN))) {
+                            vehicleJSON = gson.toJson(vehicle);
+                            parseAndUpdate("queryVehicle", null, vehicleJSON);
+                            if (logger.isTraceEnabled()) {
+                                logger.trace("Vehicle is id {}/vehicle_id {}/tokens {}", vehicle.id, vehicle.vehicleId,
+                                        vehicle.tokens);
+                            }
+                            return vehicle;
+                        }
+                    }
+
                 }
             } catch (ProcessingException e) {
                 updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
@@ -855,199 +850,153 @@ public class TeslaVehicleHandler extends BaseThingHandler {
         vehicle = queryVehicle();
     }
 
-    public void parseAndUpdate(String request, String payLoad, String result) {
-        final Double LOCATION_THRESHOLD = .0000001;
-
-        JsonObject jsonObject = null;
-
+    public void parseAndUpdate(@Nullable String request, @Nullable String payLoad, @Nullable String result) {
+        final double locationThreshold = .0000001;
+        Vehicle vehicle = this.vehicle;
         try {
             if (request != null && result != null && !"null".equals(result)) {
                 updateStatus(ThingStatus.ONLINE);
+                updateState(CHANNEL_EVENTSTAMP, new DateTimeType());
                 // first, update state objects
-                switch (request) {
-                    case DRIVE_STATE: {
-                        driveState = gson.fromJson(result, DriveState.class);
+                if ("queryVehicle".equals(request)) {
+                    if (vehicle != null) {
+                        logger.debug("Vehicle state is {}", vehicle.state);
+                        updateState(TeslaChannelSelector.STATE.getChannelID(), new StringType(vehicle.state));
+                    } else {
+                        logger.debug("Vehicle state is initializing or unknown");
+                        return;
+                    }
 
-                        if (Math.abs(lastLatitude - driveState.latitude) > LOCATION_THRESHOLD
-                                || Math.abs(lastLongitude - driveState.longitude) > LOCATION_THRESHOLD) {
-                            logger.debug("Vehicle moved, resetting last location timestamp");
+                    if ("asleep".equals(vehicle.state) || "offline".equals(vehicle.state)) {
+                        logger.debug("Vehicle is {}", vehicle.state);
+                        return;
+                    }
 
-                            lastLatitude = driveState.latitude;
-                            lastLongitude = driveState.longitude;
+                    if (!lastState.equals(vehicle.state)) {
+                        lastState = vehicle.state;
+
+                        // in case vehicle changed to awake, refresh all data
+                        if (isAwake()) {
+                            logger.debug("Vehicle is now awake, updating all data");
                             lastLocationChangeTimestamp = System.currentTimeMillis();
-                        }
-                        logger.trace("Drive state: {}", driveState.shift_state);
-
-                        if ((driveState.shift_state == null) && (lastValidDriveStateNotNull)) {
-                            logger.debug("Set NULL shiftstate time");
-                            lastValidDriveStateNotNull = false;
                             lastDriveStateChangeToNullTimestamp = System.currentTimeMillis();
-                        } else if (driveState.shift_state != null) {
-                            logger.trace("Clear NULL shiftstate time");
-                            lastValidDriveStateNotNull = true;
+                            requestAllData();
                         }
 
-                        break;
+                        setActive();
                     }
-                    case GUI_STATE: {
-                        guiState = gson.fromJson(result, GUIState.class);
-                        break;
-                    }
-                    case VEHICLE_STATE: {
-                        vehicleState = gson.fromJson(result, VehicleState.class);
-                        break;
-                    }
-                    case CHARGE_STATE: {
-                        chargeState = gson.fromJson(result, ChargeState.class);
-                        if (isCharging()) {
-                            updateState(CHANNEL_CHARGE, OnOffType.ON);
-                        } else {
-                            updateState(CHANNEL_CHARGE, OnOffType.OFF);
-                        }
 
-                        break;
-                    }
-                    case CLIMATE_STATE: {
-                        climateState = gson.fromJson(result, ClimateState.class);
-                        BigDecimal avgtemp = roundBigDecimal(new BigDecimal(
-                                (climateState.driver_temp_setting + climateState.passenger_temp_setting) / 2.0f));
-                        updateState(CHANNEL_COMBINED_TEMP, new QuantityType<>(avgtemp, SIUnits.CELSIUS));
-                        break;
-                    }
-                    case "queryVehicle": {
-                        if (vehicle != null) {
-                            logger.debug("Vehicle state is {}", vehicle.state);
-                        } else {
-                            logger.debug("Vehicle state is initializing or unknown");
-                            break;
-                        }
+                    // reset timestamp if elapsed and set inactive to false
+                    if (isInactive && lastStateTimestamp + (API_SLEEP_INTERVAL_MINUTES * 60 * 1000) < System
+                            .currentTimeMillis()) {
+                        logger.debug("Vehicle did not fall asleep within sleep period, checking again");
+                        setActive();
+                    } else {
+                        boolean wasInactive = isInactive;
+                        isInactive = !isCharging() && !notReadyForSleep();
 
-                        if (vehicle != null && "asleep".equals(vehicle.state)) {
-                            logger.debug("Vehicle is asleep.");
-                            break;
-                        }
-
-                        if (vehicle != null && !lastState.equals(vehicle.state)) {
-                            lastState = vehicle.state;
-
-                            // in case vehicle changed to awake, refresh all data
-                            if (isAwake()) {
-                                logger.debug("Vehicle is now awake, updating all data");
-                                lastLocationChangeTimestamp = System.currentTimeMillis();
-                                lastDriveStateChangeToNullTimestamp = System.currentTimeMillis();
-                                requestAllData();
-                            }
-
-                            setActive();
-                        }
-
-                        // reset timestamp if elapsed and set inactive to false
-                        if (isInactive && lastStateTimestamp + (API_SLEEP_INTERVAL_MINUTES * 60 * 1000) < System
-                                .currentTimeMillis()) {
-                            logger.debug("Vehicle did not fall asleep within sleep period, checking again");
-                            setActive();
-                        } else {
-                            boolean wasInactive = isInactive;
-                            isInactive = !isCharging() && !notReadyForSleep();
-
-                            if (!wasInactive && isInactive) {
-                                lastStateTimestamp = System.currentTimeMillis();
-                                logger.debug("Vehicle is inactive");
-                            }
-                        }
-
-                        break;
-                    }
-                }
-
-                // secondly, reformat the response string to a JSON compliant
-                // object for some specific non-JSON compatible requests
-                switch (request) {
-                    case MOBILE_ENABLED_STATE: {
-                        jsonObject = new JsonObject();
-                        jsonObject.addProperty(MOBILE_ENABLED_STATE, result);
-                        break;
-                    }
-                    default: {
-                        jsonObject = JsonParser.parseString(result).getAsJsonObject();
-                        break;
-                    }
-                }
-            }
-
-            // process the result
-            if (jsonObject != null && result != null && !"null".equals(result)) {
-                // deal with responses for "set" commands, which get confirmed
-                // positively, or negatively, in which case a reason for failure
-                // is provided
-                if (jsonObject.get("reason") != null && jsonObject.get("reason").getAsString() != null) {
-                    boolean requestResult = jsonObject.get("result").getAsBoolean();
-                    logger.debug("The request ({}) execution was {}, and reported '{}'", new Object[] { request,
-                            requestResult ? "successful" : "not successful", jsonObject.get("reason").getAsString() });
-                } else {
-                    Set<Map.Entry<String, JsonElement>> entrySet = jsonObject.entrySet();
-
-                    long resultTimeStamp = 0;
-                    for (Map.Entry<String, JsonElement> entry : entrySet) {
-                        if ("timestamp".equals(entry.getKey())) {
-                            resultTimeStamp = Long.valueOf(entry.getValue().getAsString());
-                            if (logger.isTraceEnabled()) {
-                                Date date = new Date(resultTimeStamp);
-                                SimpleDateFormat dateFormatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS");
-                                logger.trace("The request result timestamp is {}", dateFormatter.format(date));
-                            }
-                            break;
+                        if (!wasInactive && isInactive) {
+                            lastStateTimestamp = System.currentTimeMillis();
+                            logger.debug("Vehicle is inactive");
                         }
                     }
+                } else if ("vehicleData".equals(request)) {
+                    VehicleData vehicleData = gson.fromJson(result, VehicleData.class);
+                    if (vehicleData == null) {
+                        logger.error("Not able to parse response '{}'", result);
+                        return;
+                    }
+
+                    DriveState driveState = this.driveState = vehicleData.driveState;
+
+                    if (driveState != null && (Math.abs(lastLatitude - driveState.latitude) > locationThreshold
+                            || Math.abs(lastLongitude - driveState.longitude) > locationThreshold)) {
+                        logger.debug("Vehicle moved, resetting last location timestamp");
+
+                        lastLatitude = driveState.latitude;
+                        lastLongitude = driveState.longitude;
+                        lastLocationChangeTimestamp = System.currentTimeMillis();
+                    }
+                    logger.trace("Drive state: {}", driveState != null ? driveState.shiftState : "null");
+
+                    if ((driveState != null && driveState.shiftState == null) && (lastValidDriveStateNotNull)) {
+                        logger.debug("Set NULL shiftstate time");
+                        lastValidDriveStateNotNull = false;
+                        lastDriveStateChangeToNullTimestamp = System.currentTimeMillis();
+                    } else if (driveState != null && driveState.shiftState != null) {
+                        logger.trace("Clear NULL shiftstate time");
+                        lastValidDriveStateNotNull = true;
+                    }
+
+                    guiState = vehicleData.guiSettings;
+
+                    VehicleState vehicleState = this.vehicleState = vehicleData.vehicleState;
+
+                    chargeState = vehicleData.chargeState;
+                    if (isCharging()) {
+                        updateState(CHANNEL_CHARGE, OnOffType.ON);
+                    } else {
+                        updateState(CHANNEL_CHARGE, OnOffType.OFF);
+                    }
+
+                    ClimateState climateState = this.climateState = vehicleData.climateState;
+                    BigDecimal avgtemp = roundBigDecimal(new BigDecimal(
+                            (climateState.passengerTempSetting + climateState.passengerTempSetting) / 2.0f));
+                    updateState(CHANNEL_COMBINED_TEMP, new QuantityType<>(avgtemp, SIUnits.CELSIUS));
+
+                    SoftwareUpdate softwareUpdate = this.softwareUpdate = vehicleState.softwareUpdate;
 
                     try {
                         lock.lock();
 
-                        boolean proceed = true;
-                        if (resultTimeStamp < lastTimeStamp && request == DRIVE_STATE) {
-                            proceed = false;
-                        }
+                        Set<Map.Entry<String, JsonElement>> entrySet = new HashSet<>();
 
-                        if (proceed) {
-                            for (Map.Entry<String, JsonElement> entry : entrySet) {
-                                try {
-                                    TeslaChannelSelector selector = TeslaChannelSelector
-                                            .getValueSelectorFromRESTID(entry.getKey());
-                                    if (!selector.isProperty()) {
-                                        if (!entry.getValue().isJsonNull()) {
-                                            updateState(selector.getChannelID(), teslaChannelSelectorProxy.getState(
-                                                    entry.getValue().getAsString(), selector, editProperties()));
-                                            if (logger.isTraceEnabled()) {
-                                                logger.trace(
-                                                        "The variable/value pair '{}':'{}' is successfully processed",
-                                                        entry.getKey(), entry.getValue());
-                                            }
-                                        } else {
-                                            updateState(selector.getChannelID(), UnDefType.UNDEF);
+                        entrySet.addAll(gson.toJsonTree(driveState, DriveState.class).getAsJsonObject().entrySet());
+                        entrySet.addAll(gson.toJsonTree(guiState, GUIState.class).getAsJsonObject().entrySet());
+                        entrySet.addAll(gson.toJsonTree(vehicleState, VehicleState.class).getAsJsonObject().entrySet());
+                        entrySet.addAll(gson.toJsonTree(chargeState, ChargeState.class).getAsJsonObject().entrySet());
+                        entrySet.addAll(gson.toJsonTree(climateState, ClimateState.class).getAsJsonObject().entrySet());
+                        entrySet.addAll(
+                                gson.toJsonTree(softwareUpdate, SoftwareUpdate.class).getAsJsonObject().entrySet());
+
+                        for (Map.Entry<String, JsonElement> entry : entrySet) {
+                            try {
+                                TeslaChannelSelector selector = TeslaChannelSelector
+                                        .getValueSelectorFromRESTID(entry.getKey());
+                                if (!selector.isProperty()) {
+                                    if (!entry.getValue().isJsonNull()) {
+                                        updateState(selector.getChannelID(), teslaChannelSelectorProxy
+                                                .getState(entry.getValue().getAsString(), selector, editProperties()));
+                                        if (logger.isTraceEnabled()) {
+                                            logger.trace("The variable/value pair '{}':'{}' is successfully processed",
+                                                    entry.getKey(), entry.getValue());
                                         }
                                     } else {
-                                        if (!entry.getValue().isJsonNull()) {
-                                            Map<String, String> properties = editProperties();
-                                            properties.put(selector.getChannelID(), entry.getValue().getAsString());
-                                            updateProperties(properties);
-                                            if (logger.isTraceEnabled()) {
-                                                logger.trace(
-                                                        "The variable/value pair '{}':'{}' is successfully used to set property '{}'",
-                                                        entry.getKey(), entry.getValue(), selector.getChannelID());
-                                            }
-                                        }
+                                        updateState(selector.getChannelID(), UnDefType.UNDEF);
                                     }
-                                } catch (IllegalArgumentException e) {
-                                    logger.trace("The variable/value pair '{}':'{}' is not (yet) supported",
-                                            entry.getKey(), entry.getValue());
-                                } catch (ClassCastException | IllegalStateException e) {
-                                    logger.trace("An exception occurred while converting the JSON data : '{}'",
-                                            e.getMessage(), e);
+                                } else if (!entry.getValue().isJsonNull()) {
+                                    Map<String, String> properties = editProperties();
+                                    properties.put(selector.getChannelID(), entry.getValue().getAsString());
+                                    updateProperties(properties);
+                                    if (logger.isTraceEnabled()) {
+                                        logger.trace(
+                                                "The variable/value pair '{}':'{}' is successfully used to set property '{}'",
+                                                entry.getKey(), entry.getValue(), selector.getChannelID());
+                                    }
                                 }
+                            } catch (IllegalArgumentException e) {
+                                logger.trace("The variable/value pair '{}':'{}' is not (yet) supported", entry.getKey(),
+                                        entry.getValue());
+                            } catch (ClassCastException | IllegalStateException e) {
+                                logger.trace("An exception occurred while converting the JSON data : '{}'",
+                                        e.getMessage(), e);
                             }
+                        }
+
+                        if (softwareUpdate.version == null || softwareUpdate.version.isBlank()) {
+                            updateState(CHANNEL_SOFTWARE_UPDATE_AVAILABLE, OnOffType.OFF);
                         } else {
-                            logger.warn("The result for request '{}' is discarded due to an out of sync timestamp",
-                                    request);
+                            updateState(CHANNEL_SOFTWARE_UPDATE_AVAILABLE, OnOffType.ON);
                         }
                     } finally {
                         lock.unlock();
@@ -1061,8 +1010,13 @@ public class TeslaVehicleHandler extends BaseThingHandler {
 
     @SuppressWarnings("unchecked")
     protected QuantityType<Temperature> commandToQuantityType(Command command) {
-        if (command instanceof QuantityType) {
-            return ((QuantityType<Temperature>) command).toUnit(SIUnits.CELSIUS);
+        if (command instanceof QuantityType quantityCommand) {
+            QuantityType<Temperature> commandInCelsius = quantityCommand.toUnit(SIUnits.CELSIUS);
+            if (commandInCelsius == null) {
+                logger.warn("Unable to convert command {} to CELSIUS", command);
+            } else {
+                return commandInCelsius;
+            }
         }
         return new QuantityType<>(new BigDecimal(command.toString()), SIUnits.CELSIUS);
     }
@@ -1075,72 +1029,47 @@ public class TeslaVehicleHandler extends BaseThingHandler {
         return value.setScale(1, RoundingMode.HALF_EVEN);
     }
 
-    protected Runnable slowStateRunnable = () -> {
+    protected Runnable stateRunnable = () -> {
         try {
             queryVehicleAndUpdate();
             boolean allowQuery = allowQuery();
 
             if (allowQuery) {
-                requestData(CHARGE_STATE);
-                requestData(CLIMATE_STATE);
-                requestData(GUI_STATE);
-                queryVehicle(MOBILE_ENABLED_STATE);
+                requestAllData();
+            } else if (allowWakeUp) {
+                wakeUp();
+            } else if (isAwake()) {
+                logger.debug("Throttled state polling to allow sleep, occupied/idle, or in a console mode");
             } else {
-                if (allowWakeUp) {
-                    wakeUp();
-                } else {
-                    if (isAwake()) {
-                        logger.debug("slowpoll: Throttled to allow sleep, occupied/idle, or in a console mode");
-                    } else {
-                        lastAdvModesTimestamp = System.currentTimeMillis();
-                    }
-                }
+                lastAdvModesTimestamp = System.currentTimeMillis();
             }
         } catch (Exception e) {
-            logger.warn("Exception occurred in slowStateRunnable", e);
-        }
-    };
-
-    protected Runnable fastStateRunnable = () -> {
-        if (getThing().getStatus() == ThingStatus.ONLINE) {
-            boolean allowQuery = allowQuery();
-
-            if (allowQuery) {
-                requestData(DRIVE_STATE);
-                requestData(VEHICLE_STATE);
-            } else {
-                if (allowWakeUp) {
-                    wakeUp();
-                } else {
-                    if (isAwake()) {
-                        logger.debug("fastpoll: Throttled to allow sleep, occupied/idle, or in a console mode");
-                    }
-                }
-            }
+            logger.warn("Exception occurred in stateRunnable", e);
         }
     };
 
     protected Runnable eventRunnable = new Runnable() {
+        @Nullable
         TeslaEventEndpoint eventEndpoint;
         boolean isAuthenticated = false;
         long lastPingTimestamp = 0;
 
         @Override
         public void run() {
-            eventEndpoint = new TeslaEventEndpoint(webSocketFactory);
+            TeslaEventEndpoint eventEndpoint = new TeslaEventEndpoint(getThing().getUID(), webSocketFactory);
             eventEndpoint.addEventHandler(new TeslaEventEndpoint.EventHandler() {
                 @Override
-                public void handleEvent(Event event) {
+                public void handleEvent(@Nullable Event event) {
                     if (event != null) {
-                        switch (event.msg_type) {
+                        switch (event.msgType) {
                             case "control:hello":
                                 logger.debug("Event : Received hello");
                                 break;
                             case "data:update":
                                 logger.debug("Event : Received an update: '{}'", event.value);
 
-                                String vals[] = event.value.split(",");
-                                long currentTimeStamp = Long.valueOf(vals[0]);
+                                String[] vals = event.value.split(",");
+                                long currentTimeStamp = Long.parseLong(vals[0]);
                                 long systemTimeStamp = System.currentTimeMillis();
                                 if (logger.isDebugEnabled()) {
                                     SimpleDateFormat dateFormatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS");
@@ -1151,7 +1080,7 @@ public class TeslaVehicleHandler extends BaseThingHandler {
                                 }
                                 if (systemTimeStamp - currentTimeStamp < EVENT_TIMESTAMP_AGE_LIMIT) {
                                     if (currentTimeStamp > lastTimeStamp) {
-                                        lastTimeStamp = Long.valueOf(vals[0]);
+                                        lastTimeStamp = Long.parseLong(vals[0]);
                                         if (logger.isDebugEnabled()) {
                                             SimpleDateFormat dateFormatter = new SimpleDateFormat(
                                                     "yyyy-MM-dd'T'HH:mm:ss.SSS");
@@ -1165,7 +1094,7 @@ public class TeslaVehicleHandler extends BaseThingHandler {
                                             if (!selector.isProperty()) {
                                                 State newState = teslaChannelSelectorProxy.getState(vals[i], selector,
                                                         editProperties());
-                                                if (newState != null && !"".equals(vals[i])) {
+                                                if (!"".equals(vals[i])) {
                                                     updateState(selector.getChannelID(), newState);
                                                 } else {
                                                     updateState(selector.getChannelID(), UnDefType.UNDEF);
@@ -1187,15 +1116,13 @@ public class TeslaVehicleHandler extends BaseThingHandler {
                                                 }
                                             }
                                         }
-                                    } else {
-                                        if (logger.isDebugEnabled()) {
-                                            SimpleDateFormat dateFormatter = new SimpleDateFormat(
-                                                    "yyyy-MM-dd'T'HH:mm:ss.SSS");
-                                            logger.debug(
-                                                    "Event : Discarding an event with an out of sync timestamp {} (last is {})",
-                                                    dateFormatter.format(new Date(currentTimeStamp)),
-                                                    dateFormatter.format(new Date(lastTimeStamp)));
-                                        }
+                                    } else if (logger.isDebugEnabled()) {
+                                        SimpleDateFormat dateFormatter = new SimpleDateFormat(
+                                                "yyyy-MM-dd'T'HH:mm:ss.SSS");
+                                        logger.debug(
+                                                "Event : Discarding an event with an out of sync timestamp {} (last is {})",
+                                                dateFormatter.format(new Date(currentTimeStamp)),
+                                                dateFormatter.format(new Date(lastTimeStamp)));
                                     }
                                 } else {
                                     if (logger.isDebugEnabled()) {
@@ -1209,34 +1136,33 @@ public class TeslaVehicleHandler extends BaseThingHandler {
                                     }
                                     if (systemTimeStamp - currentTimeStamp > EVENT_TIMESTAMP_MAX_DELTA) {
                                         logger.trace("Event : The event endpoint will be reset");
-                                        eventEndpoint.close();
+                                        eventEndpoint.closeConnection();
                                     }
                                 }
                                 break;
                             case "data:error":
-                                logger.debug("Event : Received an error: '{}'/'{}'", event.value, event.error_type);
-                                eventEndpoint.close();
+                                logger.debug("Event : Received an error: '{}'/'{}'", event.value, event.errorType);
+                                eventEndpoint.closeConnection();
                                 break;
                         }
                     }
                 }
             });
-
+            this.eventEndpoint = eventEndpoint;
             while (true) {
                 try {
                     if (getThing().getStatus() == ThingStatus.ONLINE) {
                         if (isAwake()) {
                             eventEndpoint.connect(new URI(URI_EVENT));
-
                             if (eventEndpoint.isConnected()) {
                                 if (!isAuthenticated) {
-                                    logger.debug("Event : Authenticating vehicle {}", vehicle.vehicle_id);
+                                    logger.debug("Event : Authenticating vehicle {}", vehicle.vehicleId);
                                     JsonObject payloadObject = new JsonObject();
                                     payloadObject.addProperty("msg_type", "data:subscribe_oauth");
                                     payloadObject.addProperty("token", account.getAccessToken());
                                     payloadObject.addProperty("value", Arrays.asList(EventKeys.values()).stream()
                                             .skip(1).map(Enum::toString).collect(Collectors.joining(",")));
-                                    payloadObject.addProperty("tag", vehicle.vehicle_id);
+                                    payloadObject.addProperty("tag", vehicle.vehicleId);
 
                                     eventEndpoint.sendMessage(gson.toJson(payloadObject));
                                     isAuthenticated = true;
@@ -1260,7 +1186,7 @@ public class TeslaVehicleHandler extends BaseThingHandler {
                                             "Event : Reached the maximum number of errors ({}) for the current interval ({} seconds)",
                                             EVENT_MAXIMUM_ERRORS_IN_INTERVAL, EVENT_ERROR_INTERVAL_SECONDS);
                                     updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR);
-                                    eventEndpoint.close();
+                                    eventEndpoint.closeConnection();
                                 }
 
                                 if ((System.currentTimeMillis() - eventIntervalTimestamp) > 1000
@@ -1298,6 +1224,8 @@ public class TeslaVehicleHandler extends BaseThingHandler {
 
                 if (Thread.interrupted()) {
                     logger.debug("Event : The event thread was interrupted");
+                    eventEndpoint.close();
+                    this.eventEndpoint = eventEndpoint;
                     return;
                 }
             }

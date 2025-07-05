@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2010-2022 Contributors to the openHAB project
+ * Copyright (c) 2010-2024 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -35,14 +35,12 @@ import org.openhab.binding.mqtt.generic.ChannelConfigBuilder;
 import org.openhab.binding.mqtt.generic.ChannelState;
 import org.openhab.binding.mqtt.generic.MqttChannelStateDescriptionProvider;
 import org.openhab.binding.mqtt.generic.ThingHandlerHelper;
-import org.openhab.binding.mqtt.generic.TransformationServiceProvider;
 import org.openhab.binding.mqtt.generic.values.OnOffValue;
 import org.openhab.binding.mqtt.generic.values.TextValue;
 import org.openhab.binding.mqtt.generic.values.ValueFactory;
 import org.openhab.binding.mqtt.handler.AbstractBrokerHandler;
 import org.openhab.core.config.core.Configuration;
 import org.openhab.core.io.transport.mqtt.MqttBrokerConnection;
-import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.library.types.StringType;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
@@ -51,6 +49,7 @@ import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.ThingStatusInfo;
 import org.openhab.core.thing.binding.ThingHandlerCallback;
 import org.openhab.core.types.RefreshType;
+import org.openhab.core.types.UnDefType;
 
 /**
  * Tests cases for {@link GenericMQTTThingHandler}.
@@ -90,8 +89,8 @@ public class GenericThingHandlerTests {
         doReturn(CompletableFuture.completedFuture(true)).when(connectionMock).publish(any(), any(), anyInt(),
                 anyBoolean());
 
-        thingHandler = spy(new GenericMQTTThingHandler(thingMock, mock(MqttChannelStateDescriptionProvider.class),
-                mock(TransformationServiceProvider.class), 1500));
+        thingHandler = spy(
+                new GenericMQTTThingHandler(thingMock, mock(MqttChannelStateDescriptionProvider.class), 1500));
         thingHandler.setCallback(callbackMock);
 
         // Return the bridge handler if the thing handler asks for it
@@ -156,8 +155,9 @@ public class GenericThingHandlerTests {
 
         StringType updateValue = new StringType("UPDATE");
         thingHandler.handleCommand(TEXT_CHANNEL_UID, updateValue);
-        verify(value).update(eq(updateValue));
-        assertThat(channelConfig.getCache().getChannelState().toString(), is("UPDATE"));
+        verify(value).parseCommand(eq(updateValue));
+        // It didn't update the cached state
+        assertThat(value.getChannelState(), is(UnDefType.UNDEF));
     }
 
     @Test
@@ -173,8 +173,7 @@ public class GenericThingHandlerTests {
         StringType updateValue = new StringType("ON");
         thingHandler.handleCommand(TEXT_CHANNEL_UID, updateValue);
 
-        verify(value).update(eq(updateValue));
-        assertThat(channelConfig.getCache().getChannelState(), is(OnOffType.ON));
+        verify(value).parseCommand(eq(updateValue));
     }
 
     @Test
@@ -185,7 +184,7 @@ public class GenericThingHandlerTests {
                         textValue, thingHandler));
         doReturn(channelConfig).when(thingHandler).createChannelState(any(), any(), any());
         thingHandler.initialize();
-        byte payload[] = "UPDATE".getBytes();
+        byte[] payload = "UPDATE".getBytes();
         // Test process message
         channelConfig.processMessage("test/state", payload);
 
