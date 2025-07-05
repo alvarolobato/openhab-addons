@@ -1,30 +1,27 @@
 package org.openhab.binding.openhasp.internal.layout.components;
 
 import static org.openhab.binding.openhasp.internal.layout.OpenHASPLayout.OBJECT_ID;
-import static org.openhab.binding.openhasp.internal.layout.OpenHASPLayout.WIDGET_LABEL;
 
-import java.io.IOException;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.jdt.annotation.NonNull;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.openhasp.internal.ObjectEvent;
-import org.openhab.binding.openhasp.internal.layout.TemplateProcessor;
 import org.openhab.core.items.Item;
 import org.openhab.core.library.items.NumberItem;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.model.sitemap.sitemap.Mapping;
 import org.openhab.core.model.sitemap.sitemap.Selection;
+import org.openhab.core.ui.items.ItemUIRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @NonNullByDefault
-public class SelectionWidget extends AbstractComponent {
+public class SelectionWidget extends LabelIconComponent {
     private static final Logger logger = LoggerFactory.getLogger(SelectionWidget.class);
-    private String label;
 
     @Nullable
     private String objectIdSelect;
@@ -33,10 +30,9 @@ public class SelectionWidget extends AbstractComponent {
     private String[] positionValues;
     private int selected;
 
-    public SelectionWidget(HashMap<String, String> context, @Nullable Selection sel, @Nullable Item item) {
-        super(context, sel, item);
-        this.label = getWidgetLabel(w, item != null ? item.getState() : null);
-
+    public SelectionWidget(HashMap<String, String> context, @Nullable Selection sel, @Nullable Item item,
+            @NonNull ItemUIRegistry itemUIRegistry) {
+        super(context, sel, item, itemUIRegistry);
         options = new String[sel.getMappings().size()];
         positionValues = new String[sel.getMappings().size()];
         int i = 0;
@@ -53,33 +49,28 @@ public class SelectionWidget extends AbstractComponent {
     }
 
     @Override
-    public void render(TemplateProcessor tplProc, Map<String, String> context, ArrayList<String> objectArray)
-            throws IOException {
-
-        context.put(WIDGET_LABEL, label);
-        StringBuffer optionsRendered = new StringBuffer();
-
-        for (String opt : options) {
-            optionsRendered.append(opt).append("\\n");
-        }
-
-        context.put("widgetOptions", optionsRendered.toString()); // options in the dropdown
-        context.put("widgetVal", Integer.toString(selected)); // number of selected option
-
-        objectArray.addAll(tplProc.processTemplate(getComponentTemplate(getComponent()), context));
-
-        // process mappings
-        objectIdSelect = context.get(OBJECT_ID + "select");
+    public List<String> getIds() {
+        List<String> ids = super.getIds();
+        addToListSafe(ids, objectIdSelect);
+        return ids;
     }
 
     @Override
-    public List<String> getIds() {
-        ArrayList<String> ids = new ArrayList<String>();
-        String id = objectIdSelect;
-        if (id != null) {
-            ids.add(id);
+    public void prepareContext(Map<String, String> context) {
+        super.prepareContext(context);
+        StringBuffer optionsRendered = new StringBuffer();
+        for (String opt : options) {
+            optionsRendered.append(opt).append("\\n");
         }
-        return ids;
+        context.put("widgetOptions", optionsRendered.toString()); // options in the dropdown
+        context.put("widgetVal", Integer.toString(selected)); // number of selected option
+        addToContextSafe(context, OBJECT_ID + "select", objectIdSelect);
+    }
+
+    @Override
+    public void readFromContext(Map<String, String> context) {
+        super.readFromContext(context);
+        objectIdSelect = context.get(OBJECT_ID + "select");
     }
 
     @Override
@@ -127,6 +118,7 @@ public class SelectionWidget extends AbstractComponent {
 
     @Override
     public void updateState() {
+        super.updateState();
         Item item = getItem();
         if (item != null) {
             DecimalType decimal = item.getStateAs(DecimalType.class);
@@ -152,20 +144,5 @@ public class SelectionWidget extends AbstractComponent {
                     positionValues);
         }
         return 0;
-    }
-
-    @Override
-    public void sendStatusUpdate(TemplateProcessor tplProc, Map<String, String> context, ArrayList<String> objectArray)
-            throws IOException {
-        context.put(WIDGET_LABEL, label);
-        String id;
-
-        id = objectIdSelect;
-        if (id != null) {
-            context.put(OBJECT_ID + "select", id);
-        }
-
-        context.put("select_value", Integer.toString(selected));
-        objectArray.addAll(tplProc.processTemplate(getComponentStatusTemplate("val"), context));
     }
 }

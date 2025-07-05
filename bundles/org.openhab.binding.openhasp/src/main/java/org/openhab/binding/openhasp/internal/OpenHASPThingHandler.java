@@ -13,16 +13,24 @@
 
 package org.openhab.binding.openhasp.internal;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.mqtt.generic.AbstractMQTTThingHandler;
+import org.openhab.binding.mqtt.generic.ChannelConfig;
 import org.openhab.binding.mqtt.generic.ChannelState;
 import org.openhab.binding.mqtt.generic.MqttChannelTypeProvider;
+import org.openhab.binding.mqtt.generic.TransformationServiceProvider;
+import org.openhab.binding.mqtt.generic.values.Value;
+import org.openhab.binding.mqtt.generic.values.ValueFactory;
 import org.openhab.binding.openhasp.internal.OpenHASPBindingConstants.CommandType;
 import org.openhab.binding.openhasp.internal.layout.OpenHASPLayoutManager;
 import org.openhab.core.config.core.Configuration;
@@ -33,12 +41,16 @@ import org.openhab.core.io.transport.mqtt.MqttConnectionState;
 import org.openhab.core.items.ItemRegistry;
 import org.openhab.core.library.types.PercentType;
 import org.openhab.core.model.sitemap.SitemapProvider;
+import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingRegistry;
 import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
+import org.openhab.core.thing.type.ChannelTypeUID;
 import org.openhab.core.types.Command;
+import org.openhab.core.types.StateDescription;
+import org.openhab.core.ui.items.ItemUIRegistry;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.ServiceRegistration;
 import org.slf4j.Logger;
@@ -62,6 +74,7 @@ public class OpenHASPThingHandler extends AbstractMQTTThingHandler implements Mq
     // private @Nullable MqttBrokerConnection connection;
     // private ThingRegistry thingRegistry;
     private ItemRegistry itemRegistry;
+    private ItemUIRegistry itemUIRegistry;
     // private @Nullable OpenHASPThingConfiguration config;
     private String plateId = "";
     private String thingId;
@@ -74,10 +87,13 @@ public class OpenHASPThingHandler extends AbstractMQTTThingHandler implements Mq
     private @Nullable OpenHASPThingConfiguration config;
 
     private BundleContext bundleContext;
+    protected final TransformationServiceProvider transformationServiceProvider;
+    final Map<ChannelUID, ChannelState> channelStateByChannelUID = new HashMap<>();
 
     public OpenHASPThingHandler(Thing thing, ThingRegistry thingRegistry, BundleContext bundleContext,
-            MqttChannelTypeProvider channelTypeProvider, ItemRegistry itemRegistry, int deviceTimeout,
-            int subscribeTimeout, int attributeReceiveTimeout, List<SitemapProvider> sitemapProviders, Gson gson) {
+            MqttChannelTypeProvider channelTypeProvider, TransformationServiceProvider transformationServiceProvider,
+            ItemRegistry itemRegistry, ItemUIRegistry itemUIRegistry, int deviceTimeout, int subscribeTimeout,
+            int attributeReceiveTimeout, List<SitemapProvider> sitemapProviders, Gson gson) {
         super(thing, deviceTimeout);
         this.bundleContext = bundleContext;
 
@@ -85,7 +101,9 @@ public class OpenHASPThingHandler extends AbstractMQTTThingHandler implements Mq
 
         // this.thingRegistry = thingRegistry;
         this.itemRegistry = itemRegistry;
+        this.itemUIRegistry = itemUIRegistry;
         this.sitemapProviders = sitemapProviders;
+        this.transformationServiceProvider = transformationServiceProvider;
         // this.gson = gson;
 
         thingId = getThing().getUID().getId();
@@ -108,7 +126,7 @@ public class OpenHASPThingHandler extends AbstractMQTTThingHandler implements Mq
 
             OpenHASPCommunicationManager comm = new OpenHASPCommunicationManager(plateId, connection);
             this.comm = comm;
-            layoutManager = new OpenHASPLayoutManager(thingId, plateId, comm, config, itemRegistry);
+            layoutManager = new OpenHASPLayoutManager(thingId, plateId, comm, config, itemRegistry, itemUIRegistry);
 
             if (plate != null) {
                 logger.error("############ There was already a plate object"); // TODO CHECK THIS CASE
@@ -184,6 +202,38 @@ public class OpenHASPThingHandler extends AbstractMQTTThingHandler implements Mq
     public void initialize() { // Called after start
         logger.debug("Initializing plate configuration {}", plateId);
         loadConfiguration();
+
+        List<ChannelUID> configErrors = new ArrayList<>();
+        for (Channel channel : thing.getChannels()) {
+            final ChannelTypeUID channelTypeUID = channel.getChannelTypeUID();
+            if (channelTypeUID == null) {
+                logger.warn("Channel {} has no type", channel.getLabel());
+                continue;
+            }
+            final ChannelConfig channelConfig = channel.getConfiguration().as(ChannelConfig.class);
+            try {
+                Value value = ValueFactory.createValueState(channelConfig, channelTypeUID.getId());
+                ChannelState channelState = createChannelState(channelConfig, channel.getUID(), value);
+                channelStateByChannelUID.put(channel.getUID(), channelState);
+                StateDescription description = value.createStateDescription(channelConfig.commandTopic.isBlank())
+                        .build().toStateDescription();
+                // if (description != null) {
+                // stateDescProvider.setDescription(channel.getUID(), description);
+                // }
+            } catch (IllegalArgumentException e) {
+                logger.warn("Configuration error for channel '{}'", channel.getUID(), e);
+                configErrors.add(channel.getUID());
+            }
+        }
+
+        // If some channels could not start up, put the entire thing offline and display the channels
+        // in question to the user.
+        if (!configErrors.isEmpty()) {
+            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Remove and recreate: "
+                    + configErrors.stream().map(ChannelUID::getAsString).collect(Collectors.joining(",")));
+            return;
+        }
+
         super.initialize();
     }
 
@@ -197,6 +247,17 @@ public class OpenHASPThingHandler extends AbstractMQTTThingHandler implements Mq
         plateId = config.deviceId;
 
         logger.debug("Configuration loaded for {}", thingId);
+    }
+
+    protected ChannelState createChannelState(ChannelConfig channelConfig, ChannelUID channelUID, Value valueState) {
+        ChannelState state = new ChannelState(channelConfig, channelUID, valueState, this);
+
+        // Incoming value transformations
+        state.addTransformation(channelConfig.transformationPattern, transformationServiceProvider);
+        // Outgoing value transformations
+        state.addTransformationOut(channelConfig.transformationPatternOut, transformationServiceProvider);
+
+        return state;
     }
 
     @Override
@@ -215,9 +276,7 @@ public class OpenHASPThingHandler extends AbstractMQTTThingHandler implements Mq
 
     @Override
     public @Nullable ChannelState getChannelState(ChannelUID channelUID) {
-        // TODO Auto-generated method stub
-        logger.error("GET CHAMNEL STATE {} {}", plateId, channelUID);
-        return null;
+        return channelStateByChannelUID.get(channelUID);
     }
 
     @Override
@@ -274,9 +333,9 @@ public class OpenHASPThingHandler extends AbstractMQTTThingHandler implements Mq
         logger.trace("Plate {} channel {} received Command {} ({})", plateId, channelUID, command, command.getClass());
         if (OpenHASPBindingConstants.CHANNEL_BACKLIGHT.equals(channelUID.getId())) {
             if (command instanceof PercentType) {
-                updateConfigurationParameter("backlightHigh", ((PercentType) command).intValue());
-                comm.sendHASPCommand(CommandType.JSON,
-                        "backlight {\"state\":\"ON\",\"brightness\":" + config.backlightHigh + "}");
+                int value = (int) ((PercentType) command).doubleValue() * 255 / 100;
+                updateConfigurationParameter("backlightHigh", value);
+                comm.sendHASPCommand(CommandType.JSON, "backlight {\"state\":\"ON\",\"brightness\":" + value + "}");
             }
         }
     }

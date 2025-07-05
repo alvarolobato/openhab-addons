@@ -1,9 +1,7 @@
 package org.openhab.binding.openhasp.internal;
 
-import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 
-@NonNullByDefault
 public class ObjectEvent {
     @Nullable
     public String source;

@@ -1,2 +1,9 @@
-{{objId_slider}}.val={{slider_value}}
-{{objId_label}}.text={{widgetLabel}}
+{{objId_slider}}.val={{widgetVal}}
+{{objId_label}}.text={{widgetLabelText}}
+{{objId_labelState}}.text={{widgetLabelState}}
+{{objId_icon}}.text={{widgetIcon}}
+{{#eq (toDouble widgetVal) 0}} 
+    {{objId_icon}}.text_color={{icon_color_off}}
+{{else}}
+    {{objId_icon}}.text_color={{icon_color}}
+{{/eq}}

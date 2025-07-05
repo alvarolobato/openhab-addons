@@ -14,11 +14,9 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.openhasp.internal.ObjectEvent;
 import org.openhab.core.items.Item;
-import org.openhab.core.library.items.DimmerItem;
 import org.openhab.core.library.items.NumberItem;
 import org.openhab.core.library.types.DecimalType;
-import org.openhab.core.library.types.PercentType;
-import org.openhab.core.model.sitemap.sitemap.Slider;
+import org.openhab.core.model.sitemap.sitemap.Setpoint;
 import org.openhab.core.model.sitemap.sitemap.Widget;
 import org.openhab.core.types.StateDescription;
 import org.openhab.core.ui.items.ItemUIRegistry;
@@ -26,24 +24,28 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @NonNullByDefault
-public class SliderWidget extends LabelIconComponent {
-    private static final Logger logger = LoggerFactory.getLogger(SliderWidget.class);
+public class SetPointWidget extends LabelIconComponent {
+    private static final Logger logger = LoggerFactory.getLogger(SetPointWidget.class);
 
     @Nullable
-    String objectIdSlide;
+    String objectIdDown;
+    @Nullable
+    String objectIdUp;
     private double localValue;
     private double minValue;
     private double maxValue;
+    private double step;
 
-    public SliderWidget(HashMap<String, String> context, @Nullable Widget w, @Nullable Item item,
+    public SetPointWidget(HashMap<String, String> context, @Nullable Widget w, @Nullable Item item,
             @NonNull ItemUIRegistry itemUIRegistry) {
         super(context, w, item, itemUIRegistry);
         localValue = 0;
         minValue = 0;
         maxValue = 100;
+        step = 1;
 
-        if (w != null && w instanceof Slider) {
-            Slider sw = (Slider) w;
+        if (w != null && w instanceof Setpoint) {
+            Setpoint sw = (Setpoint) w;
             BigDecimal val;
             val = sw.getMinValue();
             if (val != null) {
@@ -52,6 +54,10 @@ public class SliderWidget extends LabelIconComponent {
             val = sw.getMaxValue();
             if (val != null) {
                 maxValue = val.doubleValue();
+            }
+            val = sw.getStep();
+            if (val != null) {
+                step = val.doubleValue();
             }
         } else if (item != null) {
             @Nullable
@@ -66,35 +72,46 @@ public class SliderWidget extends LabelIconComponent {
                 if (val != null) {
                     maxValue = val.doubleValue();
                 }
+                val = stateDesc.getStep();
+                if (val != null) {
+                    step = val.doubleValue();
+                }
             }
         }
     }
 
     public String getComponent() {
-        return "slider";
+        return "setpoint";
     }
 
     @Override
     public List<String> getIds() {
         List<String> ids = super.getIds();
-        addToListSafe(ids, objectIdSlide);
+        // addToListSafe(ids, objectIdSlide);
+        addToListSafe(ids, objectIdDown);
+        addToListSafe(ids, objectIdUp);
         return ids;
     }
 
     @Override
     public void haspEventReceived(ObjectEvent objectEvent) {
-        if (objectEvent.event != null && objectEvent.val != null
-                && (objectEvent.event.contains("up") || objectEvent.event.contains("changed"))) { // Slider
-            logger.trace("SLIDER CHANGE {} - event: {}", item, objectEvent);
+        if (objectEvent.event != null && (objectEvent.event.contains("up") || objectEvent.event.contains("release"))) { // click
+            logger.trace("SPINNER CLICK {} - event: {}", item, objectEvent);
+
+            double change = 0;
+            if (objectIdUp.equals(objectEvent.source)) {
+                change = step;
+            } else if (objectIdDown.equals(objectEvent.source)) {
+                change = -step;
+            }
+
             if (item != null) {
-                String value = objectEvent.val;
-                if (value != null) {
-                    if (item instanceof DimmerItem) {
-                        DimmerItem dItem = (DimmerItem) item;
-                        @Nullable
-                        PercentType command = new PercentType(value);
-                        dItem.send(command);
-                    } else if (item instanceof NumberItem) {
+                DecimalType value = item.getStateAs(DecimalType.class);
+
+                value = new DecimalType(value.doubleValue() + change);
+                if ((change > 0 || minValue <= value.doubleValue())
+                        && (change < 0 || value.doubleValue() <= maxValue)) {
+                    if (item instanceof NumberItem) {
                         NumberItem nItem = (NumberItem) item;
                         @Nullable
                         DecimalType command = new DecimalType(value);
@@ -103,8 +120,6 @@ public class SliderWidget extends LabelIconComponent {
                         logger.warn("Item {} - {} for object {} was not type dimmer {}", item,
                                 item.getClass().getSimpleName(), objectEvent.source, item);
                     }
-                } else {
-                    logger.warn("[Plate Object {}] Event value is null. Event: {}", objectEvent.source, objectEvent);
                 }
             } else {
                 logger.warn("Item for object {} not found, mapping was {} event {}", objectEvent.source, this,
@@ -119,9 +134,10 @@ public class SliderWidget extends LabelIconComponent {
         Item item = getItem();
         if (item != null) {
             DecimalType decimal = null;
-            if (item instanceof DimmerItem) {
-                decimal = item.getStateAs(PercentType.class);
-            } else if (item instanceof NumberItem) {
+            // if (item instanceof DimmerItem) {
+            // decimal = item.getStateAs(PercentType.class);
+            // } else
+            if (item instanceof NumberItem) {
                 decimal = item.getStateAs(DecimalType.class);
             } else {
                 logger.warn("Item {} - {} was not type dimmer {}", item, item.getClass().getSimpleName(), item);
@@ -145,7 +161,9 @@ public class SliderWidget extends LabelIconComponent {
     @Override
     public void prepareContext(Map<String, String> context) {
         super.prepareContext(context);
-        addToContextSafe(context, OBJECT_ID + "slider", objectIdSlide);
+        // addToContextSafe(context, OBJECT_ID + "slider", objectIdSlide);
+        addToContextSafe(context, OBJECT_ID + "down", objectIdDown);
+        addToContextSafe(context, OBJECT_ID + "up", objectIdUp);
         context.put("widgetVal", Double.toString(localValue));
         context.put("widgetMinVal", Double.toString(minValue));
         context.put("widgetMaxVal", Double.toString(maxValue));
@@ -154,6 +172,8 @@ public class SliderWidget extends LabelIconComponent {
     @Override
     public void readFromContext(Map<String, String> context) {
         super.readFromContext(context);
-        objectIdSlide = context.get(OBJECT_ID + "slider");
+        // objectIdSlide = context.get(OBJECT_ID + "slider");
+        objectIdDown = context.get(OBJECT_ID + "down");
+        objectIdUp = context.get(OBJECT_ID + "up");
     }
 }

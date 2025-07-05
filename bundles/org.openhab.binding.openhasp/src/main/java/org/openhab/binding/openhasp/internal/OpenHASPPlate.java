@@ -158,7 +158,7 @@ public class OpenHASPPlate implements EventSubscriber, OpenHASPCallbackProcessor
                     objectEvent.source = strippedTopic;
                     if (objectEvent != null) {
                         logger.trace("[Plate {}] topic {}: Event type: {}, value: {}, ObjectEvent: {}", plateId,
-                                strippedTopic, value, objectItemMapping, value, objectEvent);
+                                strippedTopic, objectItemMapping, value, objectEvent);
                         // TODO Identify the plate that sent the event
                         objectItemMapping.haspEventReceived(objectEvent);
                     } else {

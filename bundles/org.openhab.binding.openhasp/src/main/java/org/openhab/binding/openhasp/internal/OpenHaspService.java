@@ -33,6 +33,7 @@ public class OpenHaspService {
     private OpenHaspService() {
     }
 
+    // TODO: make sure there is really a single instance
     /**
      * Returns the {@link OpenHaspService} singleton instance.
      *

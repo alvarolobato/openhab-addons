@@ -1,1 +1,7 @@
-{{objId_label}}.text={{widgetLabel}}
+{{objId_label}}.text={{widgetLabelText}}
+{{objId_labelState}}.text={{widgetLabelState}}
+{{#if widgetValueColor}}
+{{objId_labelState}}.text_color={{widgetValueColor}}
+{{else}}
+{{objId_labelState}}.text_color={{text_color}}
+{{/if}}

@@ -25,19 +25,17 @@ public class OpenHASPLayout {
     public static final String PAGE_LOCATION = "pageLoc"; // Title to show on the page -> breadcrumb
     public static final String PAGE_LOCATION_RETURN_PAGE = "pageLocRePg";
     public static final String PAGE_Y = "y";
-    public static final String ITEM = "item";
     public static final String OBJECT_ID = "objId_";
 
     public static final String ICON_ON = ".on";
     public static final String ICON_OFF = ".off";
 
     public static final String WIDGET_LABEL = "widgetLabel";
+    public static final String WIDGET_LABEL_TEXT = "widgetLabelText";
+    public static final String WIDGET_LABEL_STATE = "widgetLabelState";
     public static final String WIDGET_ICON = "widgetIcon";
 
     public static final String CLICK_OBJECT_ID = "clickObjId";
-    // TODO slideOBJId is used for slider and dropdown etc, maybe convert to secondary object or something simimlar.
-    public static final String SLIDE_OBJECT_ID = "slideObjId";
-    public static final String STATUS_LABEL_ID = "statusLabelId";
     public static final String COMPONENTS_VMARGIN = "components_vmargin"; // Vertical margin between components
     public static final String COMPONENTS_MAX_Y = "components_maxy"; // Max usable vertical space for components
     public static final String TIME_CONTROL_ID = "time_control_id";
@@ -45,15 +43,6 @@ public class OpenHASPLayout {
     public static final String OVERRIDE = "_override";// Height for a specific component
 
     public static final String MAX_Y = "maxy";
-
-    public static final String TPL_COMP_GROUP = "group";
-    public static final String TPL_COMP_BUTTON = "button";
-    public static final String TPL_COMP_PAGE = "page";
-    public static final String TPL_COMP_SLIDER = "slider";
-    public static final String TPL_COMP_SETPOINT = "setpoint";
-    public static final String TPL_COMP_SECTION = "section";
-    public static final String TPL_COMP_SELECTION = "selection";
-    public static final String TPL_COMP_TEXT = "text";
 
     private static final Logger logger = LoggerFactory.getLogger(OpenHASPLayout.class);
 
@@ -81,11 +70,8 @@ public class OpenHASPLayout {
 
     private void loadTemplateProperties() {
         Properties properties = new Properties();
-
-        // String propertiesPath = getTemplatePath() + "template.properties";
         String propertiesPath = "template.properties";
 
-        // try (final InputStream stream = this.getClass().getResourceAsStream(propertiesPath)) {
         try (final InputStream stream = tplProc.getResourceAsStream(propertiesPath)) {
             if (stream != null) {
                 properties.load(stream);
@@ -125,10 +111,6 @@ public class OpenHASPLayout {
     }
 
     public void sendStatusUpdate(IComponent comp, ArrayList<String> objectArray) {
-        // TODO decide if we need more context or if it needs to be shared or local. Starting with local for now.
-
-        // Map<String, String> localContext = new HashMap<String, String>();
-        // add additional context here
         try {
             comp.sendStatusUpdate(tplProc, context, objectArray);
         } catch (IOException e) {
@@ -148,7 +130,6 @@ public class OpenHASPLayout {
             value = context.get(key);
             overriden = false;
         }
-
         if (value != null) {
             try {
                 return Integer.parseInt(value);

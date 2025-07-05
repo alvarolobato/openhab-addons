@@ -16,8 +16,8 @@
 
 		<channels>
 			<channel id="backlight" typeId="backlight"/>
-			<channel id="LWT" typeId="lwt"/>
-			<channel id="haspbutton" typeId="system.rawbutton"/>
+			<channel id="lwt" typeId="lwt"/>
+			<channel id="haspbutton" typeId="hasp-button"/>
 		</channels>
 
 		<config-description>

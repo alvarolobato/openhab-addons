@@ -21,6 +21,7 @@ import java.util.Set;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.mqtt.generic.MqttChannelTypeProvider;
+import org.openhab.binding.mqtt.generic.TransformationServiceProvider;
 import org.openhab.core.items.ItemRegistry;
 import org.openhab.core.model.sitemap.SitemapProvider;
 import org.openhab.core.thing.Thing;
@@ -29,6 +30,7 @@ import org.openhab.core.thing.ThingTypeUID;
 import org.openhab.core.thing.binding.BaseThingHandlerFactory;
 import org.openhab.core.thing.binding.ThingHandler;
 import org.openhab.core.thing.binding.ThingHandlerFactory;
+import org.openhab.core.ui.items.ItemUIRegistry;
 import org.osgi.service.component.ComponentContext;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
@@ -54,7 +56,9 @@ public class OpenHASPThingHandlerFactory extends BaseThingHandlerFactory {
 
     private @NonNullByDefault({}) ThingRegistry thingRegistry;
     private @NonNullByDefault({}) MqttChannelTypeProvider channelTypeProvider;
+    private @NonNullByDefault({}) TransformationServiceProvider transformationServiceProvider;
     private @NonNullByDefault({}) ItemRegistry itemRegistry;
+    private @NonNullByDefault({}) ItemUIRegistry itemUIRegistry;
 
     private final List<SitemapProvider> sitemapProviders = new ArrayList<>();
     private Gson gson = new Gson();
@@ -80,7 +84,8 @@ public class OpenHASPThingHandlerFactory extends BaseThingHandlerFactory {
     protected @Nullable ThingHandler createHandler(Thing thing) {
         ThingTypeUID thingTypeUID = thing.getThingTypeUID();
         if (THING_TYPE_HASP_PLATE.equals(thingTypeUID)) {
-            return new OpenHASPThingHandler(thing, thingRegistry, bundleContext, channelTypeProvider, itemRegistry,
+            return new OpenHASPThingHandler(thing, thingRegistry, bundleContext, channelTypeProvider,
+                    transformationServiceProvider, itemRegistry, itemUIRegistry,
                     OpenHASPBindingConstants.OPENHASP_DEVICE_TIMEOUT_MS,
                     OpenHASPBindingConstants.OPENHASP_SUBSCRIBE_TIMEOUT_MS,
                     OpenHASPBindingConstants.OPENHASP_ATTRIBUTE_TIMEOUT_MS, sitemapProviders, gson);
@@ -117,6 +122,15 @@ public class OpenHASPThingHandlerFactory extends BaseThingHandlerFactory {
         sitemapProviders.remove(provider);
     }
 
+    @Reference(cardinality = ReferenceCardinality.OPTIONAL, policy = ReferencePolicy.DYNAMIC)
+    public void setTransformationServiceProvider(TransformationServiceProvider transformationServiceProvider) {
+        this.transformationServiceProvider = transformationServiceProvider;
+    }
+
+    public void unsetTransformationServiceProvider(TransformationServiceProvider transformationServiceProvider) {
+        this.transformationServiceProvider = null;
+    }
+
     @Reference
     public void setItemRegistry(ItemRegistry itemRegistry) {
         this.itemRegistry = itemRegistry;
@@ -124,5 +138,14 @@ public class OpenHASPThingHandlerFactory extends BaseThingHandlerFactory {
 
     public ItemRegistry getItemRegistry() {
         return itemRegistry;
+    }
+
+    @Reference
+    public void setItemUIRegistry(ItemUIRegistry itemUIRegistry) {
+        this.itemUIRegistry = itemUIRegistry;
+    }
+
+    public ItemUIRegistry getItemUIRegistry() {
+        return itemUIRegistry;
     }
 }

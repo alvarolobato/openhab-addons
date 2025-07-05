@@ -14,9 +14,7 @@ import org.openhab.binding.openhasp.internal.layout.OpenHASPLayout;
 import org.openhab.binding.openhasp.internal.layout.TemplateProcessor;
 import org.openhab.core.items.Item;
 import org.openhab.core.model.sitemap.sitemap.Widget;
-import org.openhab.core.types.State;
-import org.openhab.core.types.StateDescription;
-import org.openhab.core.types.UnDefType;
+import org.openhab.core.ui.items.ItemUIRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,16 +29,27 @@ public abstract class AbstractComponent implements IComponent {
     @Nullable
     Item item;
 
-    protected AbstractComponent(HashMap<String, String> context, @Nullable Widget w, @Nullable Item item) {
+    @NonNull
+    ItemUIRegistry itemUIRegistry;
+
+    protected AbstractComponent(HashMap<String, String> context, @Nullable Widget w, @Nullable Item item,
+            @NonNull ItemUIRegistry itemUIRegistry) {
         this.context = context;
         this.w = w;
         this.item = item;
+        this.itemUIRegistry = itemUIRegistry;
     }
+
+    abstract protected void prepareContext(Map<String, String> context);
+
+    abstract protected void readFromContext(Map<String, String> context);
 
     @Override
     public void render(TemplateProcessor tplProc, Map<String, String> context, ArrayList<String> objectArray)
             throws IOException {
+        prepareContext(context);
         objectArray.addAll(tplProc.processTemplate(getComponentTemplate(getComponent()), context));
+        readFromContext(context);
     }
 
     public String getComponentStatusTemplate(String status) {
@@ -78,88 +87,8 @@ public abstract class AbstractComponent implements IComponent {
     @Override
     public void sendStatusUpdate(TemplateProcessor tplProc, Map<String, String> context, ArrayList<String> objectArray)
             throws IOException {
-    }
-    // protected static int getItemStateIntVal(State itemState) {
-    // int intVal = 0;
-    // if (itemState != null) {
-    // if (itemState instanceof DecimalType) {
-    // intVal = ((DecimalType) itemState).intValue();
-    // } else if (itemState instanceof QuantityType) {
-    // intVal = ((QuantityType<?>) itemState).intValue();
-    // } else {
-    // logger.trace("Selection item came with unexpected state {}", itemState.getClass().getSimpleName());
-    // }
-    // }
-    // return intVal;
-    // }
-
-    // protected static double getItemStateDoubletVal(State itemState) {
-    // double doubleVal = 0;
-    // if (itemState != null) {
-    // if (itemState instanceof DecimalType) {
-    // doubleVal = ((DecimalType) itemState).doubleValue();
-    // } else if (itemState instanceof QuantityType) {
-    // doubleVal = ((QuantityType<?>) itemState).doubleValue();
-    // } else {
-    // logger.trace("Selection item came with unexpected state {}", itemState.getClass().getSimpleName());
-    // }
-    // }
-    // return doubleVal;
-    // }
-
-    protected String getWidgetLabel(@Nullable Widget w, @Nullable State itemState) {
-        String label;
-        // Item item = itemRegistry.get(w.getItem());
-
-        if (w == null) {
-            return "NULL";
-        }
-
-        label = w.getLabel();
-        // logger.trace("label1:{}", label);
-        if (label == null || label.isEmpty()) {
-            if (item != null) {
-                label = item.getLabel();
-            }
-        }
-        if (label == null || label.isEmpty()) {
-            label = w.getItem();
-        }
-
-        if (label != null) {
-            String statePattern = null;
-            int start = label.indexOf("[");
-
-            if (label.indexOf("[") >= 0) {
-                int end = label.indexOf("]");
-                if (end > start) {
-                    statePattern = label.substring(start + 1, end).trim();
-                } else {
-                    statePattern = label.substring(start + 1).trim();
-                }
-
-                label = label.substring(0, start).trim();
-            }
-
-            if (statePattern == null && item != null) {
-                @Nullable
-                StateDescription stateDescription = item.getStateDescription();
-                if (stateDescription != null) {
-                    statePattern = stateDescription.getPattern();
-                }
-            }
-
-            if (statePattern != null && itemState != null && !(itemState instanceof UnDefType)) {
-                logger.trace("Formating widget {}, itemState {}, itemStateClass {}, label {}, pattern {}, resultado {}",
-                        w, itemState, itemState.getClass().getSimpleName(), label, statePattern,
-                        itemState.format(statePattern));
-                label = label + " " + itemState.format(statePattern);
-            }
-
-            return label;
-        } else {
-            return "NULL";
-        }
+        prepareContext(context);
+        objectArray.addAll(tplProc.processTemplate(getComponentStatusTemplate("val"), context));
     }
 
     protected String getWidgetIcon(@Nullable Widget w) {
@@ -184,7 +113,7 @@ public abstract class AbstractComponent implements IComponent {
         String result;
         for (String icon : icons) {
             result = context.get("icon." + icon);
-            if (result != null && !result.isEmpty()) {
+            if (result != null) {
                 return result;
             } else {
                 tagsNotFound.append(icon).append(" ");
@@ -193,7 +122,7 @@ public abstract class AbstractComponent implements IComponent {
 
         logger.info("No icon found for any of {}", tagsNotFound.toString());
 
-        result = context.get("icon.noicon");
+        result = context.get("icon.notfound");
         if (result != null) {
             return result;
         } else {
@@ -201,11 +130,41 @@ public abstract class AbstractComponent implements IComponent {
         }
     }
 
-    protected void addToContextSafe(Map<String, String> context, String id, @Nullable String value) {
+    protected String resolveColor(@Nullable String color) {
+
+        if (color == null) {
+            return "";
+        }
+
+        if (color.trim().startsWith("#")) {
+            return color;
+        }
+
+        String result;
+        result = context.get("color." + color);
+        if (result != null) {
+            return result;
+        } else {
+            logger.info("No color found for {}", color);
+            return "";
+        }
+    }
+
+    protected <A, B> void addToContextSafe(Map<A, B> context, A id, @Nullable B value) {
         if (value != null) {
             context.put(id, value);
         } else {
             context.remove(id);
         }
+    }
+
+    protected <A> void addToListSafe(List<A> list, @Nullable A value) {
+        if (value != null) {
+            list.add(value);
+        }
+    }
+
+    protected String processValueColor(Widget w) {
+        return resolveColor(itemUIRegistry.getValueColor(w));
     }
 }

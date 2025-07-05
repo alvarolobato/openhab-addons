@@ -1,6 +1,8 @@
 package org.openhab.binding.openhasp.internal;
 
 import static org.openhab.binding.openhasp.internal.OpenHASPBindingConstants.HASP_BASE_TOPIC;
+import static org.openhab.binding.openhasp.internal.OpenHASPBindingConstants.HASP_LWT_TOPIC;
+import static org.openhab.binding.openhasp.internal.OpenHASPBindingConstants.HASP_STATE_TOPIC;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -35,8 +37,8 @@ public class OpenHASPCommunicationManager implements MqttMessageSubscriber {
         this.plateId = plateId;
         this.connection = connection;
         plateBaseTopic = HASP_BASE_TOPIC + plateId;
-        plateStateTopic = plateBaseTopic + "/state/#";
-        plateLWTTopic = plateBaseTopic + "/LWT";
+        plateStateTopic = plateBaseTopic + "/" + HASP_STATE_TOPIC + "/#";
+        plateLWTTopic = plateBaseTopic + "/" + HASP_LWT_TOPIC;
         plateCmdTopic = plateBaseTopic + "/command";
         plateJSONCmdTopic = plateCmdTopic + "/json";
         plateJSONLCmdTopic = plateCmdTopic + "/jsonl";
@@ -52,16 +54,16 @@ public class OpenHASPCommunicationManager implements MqttMessageSubscriber {
     }
 
     public void sendHASPCommand(CommandType type, List<String> commands) {
-        // if (ThingStatus.ONLINE.equals(thing.getStatus())) {
-        int jsonLimit = 500;
-
+        int jsonLimit = 400;
         switch (type) {
             case JSON:
                 StringBuffer jsonCommand = new StringBuffer();
                 boolean first = true;
                 for (int i = 0; i < commands.size(); i++) {
-                    String command = commands.get(i);
-
+                    String command = commands.get(i).trim();
+                    if (command.isEmpty()) {
+                        continue;
+                    }
                     if ((jsonCommand.length() + command.length() + 5) >= jsonLimit) {
                         // do send if we get over the size
                         jsonCommand.append("']");
@@ -69,6 +71,7 @@ public class OpenHASPCommunicationManager implements MqttMessageSubscriber {
                         logger.trace("Send Full Command list to plate {}, command was {}", plateId, formattedCmd);
                         connection.publish(plateJSONCmdTopic, formattedCmd.getBytes(), 1, true);
                         first = true;
+                        jsonCommand.setLength(0);
                     }
 
                     if (first) {
@@ -104,12 +107,6 @@ public class OpenHASPCommunicationManager implements MqttMessageSubscriber {
                 }
                 break;
         }
-
-        // } else {
-        // logger.trace("Send Command to plate {} SKIPPED, plate state {}, command was
-        // {}", plateId, thing.getStatus(),
-        // commands);
-        // }
     }
 
     @Override

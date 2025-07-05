@@ -1,12 +1,13 @@
 //Container Object
-{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"obj","x":"5","y":"{{y}}","w":"310","h":"{{slider_height}}","radius":"15","click":"true","border_side":"0","bg_color":"{{item_bgcolor}}","bg_grad_dir":"0"}
+{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"obj","x":"5","y":"{{y}}","w":"310","h":"{{slider_height}}","radius":"15","click":"false","border_side":"0","bg_color":"{{item_bgcolor}}","bg_grad_dir":"0"}
         
 //Icon
-{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"label","x":"10","y":{{math y '+' 5}},"w":"30","h":"30","text":"\uE769","text_font":"64","text_color":"{{icon_color}}","align":"center","click":"false"}
+{{objId "icon"}}{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"label","x":"10","y":{{math y '+' 5}},"w":"30","h":"30","text":"{{widgetIcon}}","text_font":"64","text_color":"{{icon_color}}","align":"center","click":"false"}
 
 //Label name
-{{objId "label"}}{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"label","x":"45","y":{{math y '+' 5}},"w":"260","h":"{{text_height}}","text":"{{widgetLabel}}","mode":"scroll","text_font":"{{text_fontsize}}","click":"false"}
-        
+{{objId "label"}}{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"label","x":"45","y":{{math y '+' 5}},"w":"260","h":"{{text_height}}","text":"{{widgetLabelText}}","mode":"scroll","text_font":"{{text_fontsize}}","click":"false"}
+{{objId "labelState"}}{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"label","x":"45","y":{{math y '+' 5}},"w":"260","h":"{{text_height}}","text":"{{widgetLabelState}}","mode":"scroll","align":"right","text_font":"{{text_fontsize}}","click":"false"}
+
 //Slider
-{{objId "slide"}}{{sliderObj}}{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"slider","x":"20", "y":{{math y '+' 40}},"w":"280","h":"20","min":"0","max":"100", "radius":"20", "radius20":"20","bg_grad_color10":"{{control_highlight_bgcolor}}","bg_color10":"{{control_highlight_bgcolor}}"}
+{{objId "slider"}}{{sliderObj}}{"page":"{{pageNum}}","id":"{{inc "pageObjId"}}","obj":"slider","x":"20", "y":{{math y '+' 40}},"w":"280","h":"20","min":"{{widgetMinVal}}","max":"{{widgetMaxVal}}", "radius":"20", "radius20":"20","bg_grad_color10":"{{control_highlight_bgcolor}}","bg_color10":"{{control_highlight_bgcolor}}"}
 

@@ -1,172 +1,160 @@
 package org.openhab.binding.openhasp.internal.layout.components;
 
-import static org.openhab.binding.openhasp.internal.layout.OpenHASPLayout.ICON_OFF;
-import static org.openhab.binding.openhasp.internal.layout.OpenHASPLayout.ICON_ON;
 import static org.openhab.binding.openhasp.internal.layout.OpenHASPLayout.OBJECT_ID;
 import static org.openhab.binding.openhasp.internal.layout.OpenHASPLayout.WIDGET_ICON;
 import static org.openhab.binding.openhasp.internal.layout.OpenHASPLayout.WIDGET_LABEL;
+import static org.openhab.binding.openhasp.internal.layout.OpenHASPLayout.WIDGET_LABEL_STATE;
+import static org.openhab.binding.openhasp.internal.layout.OpenHASPLayout.WIDGET_LABEL_TEXT;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.jdt.annotation.NonNull;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
-import org.openhab.binding.openhasp.internal.ObjectEvent;
-import org.openhab.binding.openhasp.internal.layout.TemplateProcessor;
 import org.openhab.core.items.Item;
-import org.openhab.core.library.items.SwitchItem;
-import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.model.sitemap.sitemap.Widget;
+import org.openhab.core.types.State;
+import org.openhab.core.types.StateDescription;
+import org.openhab.core.types.UnDefType;
+import org.openhab.core.ui.items.ItemUIRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @NonNullByDefault
-public class LabelIconComponent extends AbstractComponent {
-    private static final Logger logger = LoggerFactory.getLogger(LabelIconComponent.class);
+abstract public class LabelIconComponent extends AbstractComponent {
+    private static final Logger logger = LoggerFactory.getLogger(TextWidget.class);
 
-    String label;
-
+    String widgetLabel;
+    String widgetLabelText;
+    String widgetLabelState;
     String itemIcon;
-
     String widgetIcon;
-
-    @Nullable
-    String objectIdClick;
+    String widgetValueColor;
 
     @Nullable
     String objectIdLabel;
-
+    @Nullable
+    String objectIdLabelState;
     @Nullable
     String objectIdIcon;
 
-    @Nullable
-    String objectIdSwitch;
-
-    OnOffType localState;
-
-    public LabelIconComponent(HashMap<String, String> context, Widget w, @Nullable Item item) {
-        super(context, w, item);
-        localState = OnOffType.OFF;
-        this.label = getWidgetLabel(w, item != null ? item.getState() : null);
+    public LabelIconComponent(HashMap<String, String> context, @Nullable Widget w, @Nullable Item item,
+            @NonNull ItemUIRegistry itemUIRegistry) {
+        super(context, w, item, itemUIRegistry);
+        widgetLabel = widgetLabelText = widgetLabelState = widgetValueColor = "";
+        processWidgetLabel(w, item != null ? item.getState() : null);
         this.itemIcon = getWidgetIcon(w);
-        this.widgetIcon = resolveIcon(itemIcon + ICON_OFF, itemIcon);
+        this.widgetIcon = resolveIcon(itemIcon);
     }
 
-    public String getComponent() {
-        return "button";
+    public void prepareContext(Map<String, String> context) {
+        addToContextSafe(context, WIDGET_LABEL, widgetLabel);
+        addToContextSafe(context, WIDGET_LABEL_TEXT, widgetLabelText);
+        addToContextSafe(context, WIDGET_LABEL_STATE, widgetLabelState);
+        addToContextSafe(context, WIDGET_ICON, widgetIcon);
+        addToContextSafe(context, "widgetValueColor", widgetValueColor);
+
+        addToContextSafe(context, OBJECT_ID + "label", objectIdLabel);
+        addToContextSafe(context, OBJECT_ID + "labelState", objectIdLabelState);
+        addToContextSafe(context, OBJECT_ID + "icon", objectIdIcon);
     }
 
-    @Override
-    public void render(TemplateProcessor tplProc, Map<String, String> context, ArrayList<String> objectArray)
-            throws IOException {
-
-        context.put(WIDGET_LABEL, label);
-        context.put(WIDGET_ICON, widgetIcon);
-
-        objectArray.addAll(tplProc.processTemplate(getComponentTemplate(getComponent()), context));
-
+    public void readFromContext(Map<String, String> context) {
         // process mappings
-        objectIdClick = context.get(OBJECT_ID + "click");
         objectIdLabel = context.get(OBJECT_ID + "label");
+        objectIdLabelState = context.get(OBJECT_ID + "labelState");
         objectIdIcon = context.get(OBJECT_ID + "icon");
-        objectIdSwitch = context.get(OBJECT_ID + "switch");
     }
 
     @Override
     public List<String> getIds() {
         ArrayList<String> ids = new ArrayList<String>();
-        String id = objectIdClick;
-        if (id != null) {
-            ids.add(id);
-        }
-        id = objectIdLabel;
-        if (id != null) {
-            ids.add(id);
-        }
-        id = objectIdIcon;
-        if (id != null) {
-            ids.add(id);
-        }
-        id = objectIdSwitch;
-        if (id != null) {
-            ids.add(id);
-        }
+        addToListSafe(ids, objectIdLabel);
+        addToListSafe(ids, objectIdIcon);
         return ids;
-    }
-
-    @Override
-    public void haspEventReceived(ObjectEvent objectEvent) {
-        if (item != null) {
-            if (objectEvent.event != null
-                    && (objectEvent.event.contains("up") || objectEvent.event.contains("release"))) { // Click
-                // button
-                logger.trace("BUTTON PRESS {} - event: {}", item, objectEvent);
-                if (item instanceof SwitchItem) {
-                    SwitchItem sItem = (SwitchItem) item;
-                    OnOffType targetState = null;
-                    if (objectEvent.val != null) { // Event comes from the switch
-                        if ("0".equals(objectEvent.val)) {
-                            targetState = OnOffType.OFF;
-                        } else {
-                            targetState = OnOffType.ON;
-                        }
-                        logger.trace("Event from switch sending {}", targetState);
-                    } else { // Event comes from the label -> switch to the oposite state
-                        OnOffType sState = sItem.getStateAs(OnOffType.class);
-                        if (OnOffType.ON.equals(sState)) {
-                            targetState = OnOffType.OFF;
-                        } else {
-                            targetState = OnOffType.ON;
-                        }
-                        logger.trace("Event from label current state {} sending {}", sState, targetState);
-                    }
-                    sItem.send(targetState);
-                } else {
-                    logger.warn("Item {} - {} for object {} was not type switch {}", item,
-                            item.getClass().getSimpleName(), objectEvent.source, item);
-                }
-            }
-        } else {
-            logger.warn("Item for {} not found, mapping was {}", item, this);
-        }
     }
 
     @Override
     public void updateState() {
         Item item = getItem();
         if (item != null) {
-            OnOffType sState = item.getStateAs(OnOffType.class);
-            logger.trace("Current state {}", sState);
-            if (OnOffType.ON.equals(sState)) {
-                logger.trace("Update state to ON {}", this);
-                localState = OnOffType.ON;
-                widgetIcon = resolveIcon(itemIcon + ICON_ON, itemIcon);
-            } else {
-                logger.trace("Update state to OFF {}", this);
-                localState = OnOffType.OFF;
-                widgetIcon = resolveIcon(itemIcon + ICON_OFF, itemIcon);
+            State state = item.getState();
+            if (state != null) {
+                logger.trace("Current state {}", state);
+                processWidgetLabel(w, state);
             }
         } else {
-            logger.warn("Widget {} tried to update state but Item", this);
+            logger.warn("Widget {} tried to update state but Item is null", this);
         }
     }
 
-    @Override
-    public void sendStatusUpdate(TemplateProcessor tplProc, Map<String, String> context, ArrayList<String> objectArray)
-            throws IOException {
+    protected void processWidgetLabel(@Nullable Widget w, @Nullable State itemState) {
+        String label = "";
+        String labelState = "";
+        if (w == null) {
+            widgetLabelText = "NULL";
+            widgetLabelState = "";
+            widgetLabel = widgetLabelText;
+            return;
+        }
 
-        context.put(WIDGET_LABEL, label);
-        context.put(WIDGET_ICON, widgetIcon);
+        label = w.getLabel();
+        if (label == null || label.isEmpty()) {
+            if (item != null) {
+                label = item.getLabel();
+            }
+        }
+        if (label == null || label.isEmpty()) {
+            label = w.getItem();
+        }
 
-        addToContextSafe(context, OBJECT_ID + "label", objectIdLabel);
-        addToContextSafe(context, OBJECT_ID + "icon", objectIdIcon);
-        addToContextSafe(context, OBJECT_ID + "click", objectIdClick);
-        addToContextSafe(context, OBJECT_ID + "switch", objectIdSwitch);
+        if (label != null) {
+            String statePattern = null;
+            int start = label.indexOf("[");
+            if (start >= 0) {
+                int end = label.indexOf("]");
+                if (end > start) {
+                    statePattern = label.substring(start + 1, end).trim();
+                } else {
+                    statePattern = label.substring(start + 1).trim();
+                }
+                label = label.substring(0, start).trim();
+            }
 
-        objectArray.addAll(
-                tplProc.processTemplate(getComponentStatusTemplate(localState.toString().toLowerCase()), context));
+            if ((statePattern == null || statePattern.isBlank()) && item != null) {
+                @Nullable
+                StateDescription stateDescription = item.getStateDescription();
+                if (stateDescription != null) {
+                    statePattern = stateDescription.getPattern();
+                }
+            }
+
+            widgetLabelText = label;
+
+            if (itemState != null && !(itemState instanceof UnDefType)) {
+                if (statePattern != null) {
+                    logger.trace(
+                            "Formating widget {}, itemState {}, itemStateClass {}, label {}, pattern {}, resultado {}",
+                            w, itemState, itemState.getClass().getSimpleName(), label, statePattern,
+                            itemState.format(statePattern));
+                    labelState = itemState.format(statePattern);
+                    widgetLabelState = labelState;
+                    widgetLabel = widgetLabelText + " " + widgetLabelState;
+                } else {
+                    labelState = itemState.toFullString();
+                    if (labelState != null && !labelState.isBlank()) {
+                        widgetLabelState = labelState;
+                        widgetLabel = widgetLabelText + " " + widgetLabelState;
+                    }
+                }
+            } else {
+                widgetLabel = widgetLabelText;
+            }
+
+        }
+        widgetValueColor = processValueColor(w);
     }
 }

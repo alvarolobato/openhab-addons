@@ -37,30 +37,30 @@ public class OpenHASPBindingConstants {
     public static final String DEVICE_ID_FIELD = "deviceId";
     public static final String HASP_LWT_TOPIC = "LWT";
     public static final String HASP_STATE_TOPIC = "state";
-    public static final String HASP_STATE_IDLE_TOPIC = "idle";
-    public static final String HASP_STATE_IDLE_SHORT_VALUE = "short";
-    public static final String HASP_STATE_IDLE_LONG_VALUE = "long";
-    public static final String HASP_STATE_IDLE_OFF_VALUE = "off";
+    // public static final String HASP_STATE_IDLE_TOPIC = "idle";
+    // public static final String HASP_STATE_IDLE_SHORT_VALUE = "short";
+    // public static final String HASP_STATE_IDLE_LONG_VALUE = "long";
+    // public static final String HASP_STATE_IDLE_OFF_VALUE = "off";
 
-    // List of all Thing Type UIDs
+    // // List of all Thing Type UIDs
     public static final ThingTypeUID THING_TYPE_HASP_PLATE = new ThingTypeUID(BINDING_ID, "openhasp_plate");
 
     public static final Set<ThingTypeUID> SUPPORTED_THING_TYPES = Set.of(THING_TYPE_HASP_PLATE);
 
-    // List of all Channel ids
+    // // List of all Channel ids
     public static final String CHANNEL_BACKLIGHT = "backlight";
-    public static final String CHANNEL_LWT = "LWT";
+    // public static final String CHANNEL_LWT = "LWT";
 
-    // Timeouts
+    // // Timeouts
     public static final int OPENHASP_DEVICE_TIMEOUT_MS = 30000;
     public static final int OPENHASP_SUBSCRIBE_TIMEOUT_MS = 500;
     public static final int OPENHASP_ATTRIBUTE_TIMEOUT_MS = 200;
 
-    // Default bigtness
-    public static final int OPENHASP_PLATE_HIGH_BRIGHTNESS = 100;
-    public static final int OPENHASP_PLATE_MEDIUM_BRIGHTNESS = 50;
-    public static final int OPENHASP_PLATE_LOW_BRIGHTNESS = 20;
+    // // Default bigtness
+    // // public static final int OPENHASP_PLATE_HIGH_BRIGHTNESS = 100;
+    // // public static final int OPENHASP_PLATE_MEDIUM_BRIGHTNESS = 50;
+    // // public static final int OPENHASP_PLATE_LOW_BRIGHTNESS = 20;
 
     public static final String OPENHASP_CONFIGMODE_MANUAL = "manual";
-    public static final String OPENHASP_CONFIGMODE_SITEMAP = "sitemap";
+    // public static final String OPENHASP_CONFIGMODE_SITEMAP = "sitemap";
 }
