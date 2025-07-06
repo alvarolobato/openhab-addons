@@ -1,0 +1,4 @@
+{{objId_switch}}.val=0
+{{objId_icon}}.text={{widgetIcon}}
+{{objId_icon}}.text_color={{icon_color_off}}
+// TODO change color too ,"p1b13.text_color=#9b9b9b", "p1b12.bg_color=#9b9b9b"
