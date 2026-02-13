@@ -61,6 +61,7 @@ public class OpenHASPLayout {
         this.templatePath = templatePath;
         this.templatePathFileType = templatePathFileType;
         this.context = context;
+        logger.trace("Loading template {}", templatePath);
         tplProc = new TemplateProcessor(templatePath, templatePathFileType);
         loadTemplateProperties();
     }
@@ -81,6 +82,10 @@ public class OpenHASPLayout {
             }
         } catch (IOException e) {
             logger.error("Error reading properties from " + propertiesPath, e);
+        }
+        if (logger.isTraceEnabled()) {
+            logger.trace("Template properties loaded:");
+            context.forEach((key, value) -> logger.trace("  {}: {}", key, value));
         }
     }
 

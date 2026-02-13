@@ -219,9 +219,14 @@ public class OpenHASPPlate implements EventSubscriber, OpenHASPCallbackProcessor
     }
 
     @Override
-    public void onTimerEvent() {
+    public void onTimerEvent() { // TODO don't send if offline
         // Update clock
         comm.sendHASPCommand(CommandType.JSON,
                 Arrays.asList(new String[] { timeControl + ".text=" + LocalDateTime.now().format(timePattern) }));
+    }
+
+    public void restart() {
+
+        comm.sendHASPCommand(CommandType.CMD, "restart");
     }
 }

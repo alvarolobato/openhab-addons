@@ -1,0 +1,30 @@
+serialbutton - como usar channels triggers estandares
+networkupstools - crear canales dinamicos
+
+
+https://github.com/illnesse/openhab2_pub_001
+
+
+
+git submodule update --init --recursive
+
+./build/darwin_sdl_64bits/program 
+mvn -nsu -o clean  spotless:apply install -DskipChecks
+mvn -o clean  spotless:apply install -DskipChecks
+cp target/org.openhab.binding.openhasp-3.4.0-SNAPSHOT.jar ~/openhab_dev/openhab_3.4/addons/
+
+
+
+
+
+
+-----
+
+.pio/build/darwin_sdl_64bits/program --mqttport 1883  --mqtthost localhost --mqttname mac 
+/Users/alobato/git/openHASP/.pio/build/darwin_sdl_64bits/program
+
+/opt/homebrew/opt/mosquitto/sbin/mosquitto -c /opt/homebrew/etc/mosquitto/mosquitto.conf
+
+mvn -nsu -o clean  spotless:apply install -DskipChecks 
+cp target/org.openhab.binding.openhasp-4.3.6-SNAPSHOT.jar ~/openhab_dev/openhab_4.3.5/addons/
+

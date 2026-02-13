@@ -54,6 +54,7 @@ public class OpenHASPCommunicationManager implements MqttMessageSubscriber {
     }
 
     public void sendHASPCommand(CommandType type, List<String> commands) {
+        // TODO don't send if offline
         int jsonLimit = 400;
         switch (type) {
             case JSON:

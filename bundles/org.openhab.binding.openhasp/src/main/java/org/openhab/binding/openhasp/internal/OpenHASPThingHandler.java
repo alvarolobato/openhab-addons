@@ -13,6 +13,7 @@
 
 package org.openhab.binding.openhasp.internal;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -28,6 +29,9 @@ import org.openhab.binding.mqtt.generic.AbstractMQTTThingHandler;
 import org.openhab.binding.mqtt.generic.ChannelConfig;
 import org.openhab.binding.mqtt.generic.ChannelState;
 import org.openhab.binding.mqtt.generic.MqttChannelTypeProvider;
+import org.openhab.binding.mqtt.generic.values.OnOffValue;
+import org.openhab.binding.mqtt.generic.values.PercentageValue;
+import org.openhab.binding.mqtt.generic.values.TextValue;
 import org.openhab.binding.mqtt.generic.values.Value;
 import org.openhab.binding.mqtt.generic.values.ValueFactory;
 import org.openhab.binding.openhasp.internal.OpenHASPBindingConstants.CommandType;
@@ -172,12 +176,16 @@ public class OpenHASPThingHandler extends AbstractMQTTThingHandler implements Mq
                     // If it was already online we leave it, it could come from a config save and
                     // resend pages to refresh config
                     if (ThingStatus.ONLINE.equals(thing.getStatus())) {
+                        logger.debug("Plate {} was already online, refreshing pages", plateId);
                         plate.refresh();
                     } else { // In the general case wait for it to come online with the availability topic
+                        logger.debug(
+                                "Plate {} was not online, waiting for it to come online, setting status to OFFLINE",
+                                plateId);
                         updateStatus(ThingStatus.OFFLINE);
                     }
                     logger.trace("OpenHASP plate {}/{} {}", thingId, plateId, thing.getStatus());
-
+                    logger.trace("caller", new Exception());
                     logger.trace("Subscribing to topic {} for plate {}", comm.getPlateStateTopic(), plateId);
                     connection.subscribe(comm.getPlateStateTopic(), comm);
                 } else {
@@ -210,8 +218,12 @@ public class OpenHASPThingHandler extends AbstractMQTTThingHandler implements Mq
                 continue;
             }
             final ChannelConfig channelConfig = channel.getConfiguration().as(ChannelConfig.class);
+            String channelTypeId = channelTypeUID.getId();
+
             try {
-                Value value = ValueFactory.createValueState(channelConfig, channelTypeUID.getId());
+                // Create value based on channel type
+                Value value = createChannelValue(channelTypeId, channelConfig);
+
                 ChannelState channelState = createChannelState(channelConfig, channel.getUID(), value);
                 channelStateByChannelUID.put(channel.getUID(), channelState);
                 StateDescription description = value.createStateDescription(channelConfig.commandTopic.isBlank())
@@ -225,7 +237,8 @@ public class OpenHASPThingHandler extends AbstractMQTTThingHandler implements Mq
             }
         }
 
-        // If some channels could not start up, put the entire thing offline and display the channels
+        // If some channels could not start up, put the entire thing offline and display
+        // the channels
         // in question to the user.
         if (!configErrors.isEmpty()) {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Remove and recreate: "
@@ -234,6 +247,32 @@ public class OpenHASPThingHandler extends AbstractMQTTThingHandler implements Mq
         }
 
         super.initialize();
+    }
+
+    /**
+     * Create appropriate Value objects for channel types.
+     * First tries to handle custom OpenHASP channel types, then delegates to
+     * ValueFactory for standard types.
+     */
+    private Value createChannelValue(String channelTypeId, ChannelConfig config) {
+        switch (channelTypeId) {
+            case OpenHASPBindingConstants.CHANNEL_TYPE_BACKLIGHT:
+                // Backlight is a Dimmer (0-100 percentage)
+                return new PercentageValue(config.min, config.max, config.step, config.on, config.off, null);
+            case OpenHASPBindingConstants.CHANNEL_TYPE_LWT:
+                // LWT is a String (online/offline status)
+                TextValue textValue = config.allowedStates.isBlank() ? new TextValue()
+                        : new TextValue(config.allowedStates.split(","));
+                textValue.setNullValue(config.nullValue);
+                return textValue;
+            case OpenHASPBindingConstants.CHANNEL_TYPE_HASP_BUTTON:
+                // HASP button is a Switch (ON/OFF)
+                return new OnOffValue(config.on, config.off);
+
+            default:
+                // Delegate to ValueFactory for standard MQTT channel types
+                return ValueFactory.createValueState(config, channelTypeId);
+        }
     }
 
     private void loadConfiguration() {
@@ -249,29 +288,38 @@ public class OpenHASPThingHandler extends AbstractMQTTThingHandler implements Mq
     }
 
     protected ChannelState createChannelState(ChannelConfig channelConfig, ChannelUID channelUID, Value valueState) {
-        ChannelState state = new ChannelState(channelConfig, channelUID, valueState, this);
+        ChannelState state = new ChannelState(channelConfig, channelUID, valueState, this) {
+            public void processMessage(String topic, byte[] payload) {
+                logger.error("##### MQTT message received for topic {}, channel {}, payload {}", topic, channelUID,
+                        new String(payload, StandardCharsets.UTF_8));
+                super.processMessage(topic, payload);
+            }
+        };
 
         // Incoming value transformations
-        // state.addTransformation(channelConfig.transformationPattern, transformationServiceProvider);
+        // state.addTransformation(channelConfig.transformationPattern,
+        // transformationServiceProvider);
         // // Outgoing value transformations
-        // state.addTransformationOut(channelConfig.transformationPatternOut, transformationServiceProvider);
+        // state.addTransformationOut(channelConfig.transformationPatternOut,
+        // transformationServiceProvider);
 
         return state;
     }
 
-    @Override
-    public void connectionStateChanged(MqttConnectionState state, @Nullable Throwable error) {
-        logger.info("MQTT brokers state changed to:{}", state);
-        switch (state) {
-            case CONNECTED:
-                // updateStatus(ThingStatus.ONLINE);
-                break;
-            case CONNECTING:
-            case DISCONNECTED:
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                        "Bridge (broker) is not connected to your MQTT broker.");
-        }
-    }
+    // @Override
+    // public void connectionStateChanged(MqttConnectionState state, @Nullable
+    // Throwable error) {
+    // logger.info("MQTT brokers state changed to:{}", state);
+    // switch (state) {
+    // case CONNECTED:
+    // // updateStatus(ThingStatus.ONLINE);
+    // break;
+    // case CONNECTING:
+    // case DISCONNECTED:
+    // updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+    // "Bridge (broker) is not connected to your MQTT broker.");
+    // }
+    // }
 
     @Override
     public @Nullable ChannelState getChannelState(ChannelUID channelUID) {
@@ -291,6 +339,7 @@ public class OpenHASPThingHandler extends AbstractMQTTThingHandler implements Mq
     protected void updateThingStatus(boolean messageReceived, Optional<Boolean> availabilityTopicsSeen) {
         logger.trace("Update plate {} status, messageReceived {}, availabilityTopicsSeen {}", plateId, messageReceived,
                 availabilityTopicsSeen);
+        logger.trace("caller", new Exception());
         if (availabilityTopicsSeen.orElse(messageReceived)) {
             if (plate != null) {
                 logger.trace("Plate {} came online, sending pages", plateId);
@@ -300,11 +349,11 @@ public class OpenHASPThingHandler extends AbstractMQTTThingHandler implements Mq
             }
             updateStatus(ThingStatus.ONLINE, ThingStatusDetail.NONE);
             plate.onLine();
-            logger.trace("OpenHASP plate {}/{} ONLINE", thingId, plateId);
+            logger.trace("OpenHASP plate {}/{} status ONLINE", thingId, plateId);
         } else {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE);
             plate.offLine();
-            logger.trace("OpenHASP plate {}/{} OFFLINE", thingId, plateId);
+            logger.trace("OpenHASP plate {}/{} status OFFLINE", thingId, plateId);
         }
     }
 

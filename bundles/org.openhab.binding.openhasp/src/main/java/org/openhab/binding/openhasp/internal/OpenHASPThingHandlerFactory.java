@@ -48,7 +48,7 @@ import com.google.gson.Gson;
  * @author Alvaro Lobato - Initial contribution
  */
 @NonNullByDefault
-@Component(configurationPid = "binding.openhasp", service = ThingHandlerFactory.class)
+@Component(service = ThingHandlerFactory.class)
 public class OpenHASPThingHandlerFactory extends BaseThingHandlerFactory {
 
     private static final Set<ThingTypeUID> SUPPORTED_THING_TYPES_UIDS = Set.of(THING_TYPE_HASP_PLATE);

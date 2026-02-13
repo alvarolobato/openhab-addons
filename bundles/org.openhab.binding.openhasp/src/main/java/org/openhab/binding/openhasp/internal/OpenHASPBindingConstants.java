@@ -51,6 +51,11 @@ public class OpenHASPBindingConstants {
     public static final String CHANNEL_BACKLIGHT = "backlight";
     // public static final String CHANNEL_LWT = "LWT";
 
+    // Channel type constants
+    public static final String CHANNEL_TYPE_BACKLIGHT = "backlight";
+    public static final String CHANNEL_TYPE_LWT = "lwt";
+    public static final String CHANNEL_TYPE_HASP_BUTTON = "hasp-button";
+
     // // Timeouts
     public static final int OPENHASP_DEVICE_TIMEOUT_MS = 30000;
     public static final int OPENHASP_SUBSCRIBE_TIMEOUT_MS = 500;
