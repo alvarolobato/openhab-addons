@@ -306,20 +306,19 @@ public class OpenHASPThingHandler extends AbstractMQTTThingHandler implements Mq
         return state;
     }
 
-    // @Override
-    // public void connectionStateChanged(MqttConnectionState state, @Nullable
-    // Throwable error) {
-    // logger.info("MQTT brokers state changed to:{}", state);
-    // switch (state) {
-    // case CONNECTED:
-    // // updateStatus(ThingStatus.ONLINE);
-    // break;
-    // case CONNECTING:
-    // case DISCONNECTED:
-    // updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-    // "Bridge (broker) is not connected to your MQTT broker.");
-    // }
-    // }
+    @Override
+    public void connectionStateChanged(MqttConnectionState state, @Nullable Throwable error) {
+        logger.info("MQTT brokers state changed to:{}", state);
+        switch (state) {
+            case CONNECTED:
+                // updateStatus(ThingStatus.ONLINE);
+                break;
+            case CONNECTING:
+            case DISCONNECTED:
+                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+                        "Bridge (broker) is not connected to your MQTT broker.");
+        }
+    }
 
     @Override
     public @Nullable ChannelState getChannelState(ChannelUID channelUID) {
