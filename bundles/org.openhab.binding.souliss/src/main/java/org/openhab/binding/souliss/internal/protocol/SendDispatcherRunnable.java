@@ -261,8 +261,8 @@ public class SendDispatcherRunnable implements Runnable {
                             // delete the frame
                             packetsList.get(i).getPacket().getData()[j] = 0;
                             logger.debug("{} Node: {} Slot: {} - OK Expected State", localTyp.getLabel(), node, iSlot);
-                        } else if (!isOnline) {
-                            // if offline mas as sent
+                        } else if (localTyp != null && !isOnline) {
+                            // if offline mark as sent
                             packetsList.get(i).getPacket().getData()[j] = 0;
                             logger.debug("{} Node: {} Slot: {} - is not ONLINE", localTyp.getLabel(), node, iSlot);
                         } else if (localTyp == null) {

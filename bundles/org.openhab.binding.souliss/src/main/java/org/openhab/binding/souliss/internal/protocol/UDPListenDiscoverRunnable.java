@@ -94,7 +94,8 @@ public class UDPListenDiscoverRunnable implements Runnable {
                     logger.warn("UDP socket close failed: " + e1.getLocalizedMessage(), e1);
                 }
             } catch (SocketTimeoutException e2) {
-                logger.warn("UDP SocketTimeoutException close: " + e2.getLocalizedMessage(), e2);
+                // Expected: socket uses 60s timeout as polling loop; no packet received in time is normal
+                logger.debug("Discovery socket timeout (no packet in {}s, continuing)", 60);
                 if (socket != null && !socket.isClosed()) {
                     socket.close();
                 }
