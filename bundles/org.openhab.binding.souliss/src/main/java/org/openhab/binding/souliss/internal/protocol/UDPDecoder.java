@@ -363,7 +363,7 @@ public class UDPDecoder {
                             ((SoulissGenericHandler) handler).setHealthy((mac.get(i)));
                         }
                     } else {
-                        logger.debug("decode Healthy Request Warning. Thing handler is null");
+                        logger.debug("decode Healthy Request Warning. Thing handler is null - {}", thing.getLabel());
                     }
                 }
             }
@@ -435,7 +435,9 @@ public class UDPDecoder {
                                 break;
 
                             case SoulissBindingConstants.T19:
-                                logger.debug(decodingLiteralLabel, SoulissBindingConstants.T19, packetLabel);
+                                logger.debug(decodingLiteralLabel + " node:{} slot:{} val: {} dimVal:{}",
+                                        SoulissBindingConstants.T19, packetLabel, tgtnode, slot, sVal,
+                                        getByteAtSlot(mac, slot + 1));
                                 ((SoulissT19Handler) handler).setRawState(sVal);
                                 ((SoulissT19Handler) handler).setRawStateDimmerValue(getByteAtSlot(mac, slot + 1));
                                 break;

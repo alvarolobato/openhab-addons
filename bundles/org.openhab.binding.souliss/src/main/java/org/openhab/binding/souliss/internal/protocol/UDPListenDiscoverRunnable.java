@@ -85,21 +85,21 @@ public class UDPListenDiscoverRunnable implements Runnable {
                 }
 
             } catch (BindException e) {
-                logger.warn("UDP Port busy, Souliss already listening? {} ", e.getLocalizedMessage());
+                logger.warn("UDP Port busy, Souliss already listening? " + e.getLocalizedMessage(), e);
                 try {
                     if (socket != null && !socket.isClosed()) {
                         socket.close();
                     }
                 } catch (Exception e1) {
-                    logger.warn("UDP socket close failed: {} ", e1.getLocalizedMessage());
+                    logger.warn("UDP socket close failed: " + e1.getLocalizedMessage(), e1);
                 }
             } catch (SocketTimeoutException e2) {
-                logger.warn("UDP SocketTimeoutException close: {}", e2.getLocalizedMessage());
+                logger.warn("UDP SocketTimeoutException close: " + e2.getLocalizedMessage(), e2);
                 if (socket != null && !socket.isClosed()) {
                     socket.close();
                 }
             } catch (Exception ee) {
-                logger.warn("Exception receiving-decoding message: {} ", ee.getLocalizedMessage());
+                logger.warn("Exception receiving-decoding message: " + ee.getLocalizedMessage(), ee);
                 if (socket != null && !socket.isClosed()) {
                     socket.close();
                 }

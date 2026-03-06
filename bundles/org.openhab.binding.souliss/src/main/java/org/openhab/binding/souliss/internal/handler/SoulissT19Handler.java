@@ -52,6 +52,7 @@ public class SoulissT19Handler extends SoulissGenericHandler {
 
     @Override
     public void handleCommand(ChannelUID channelUID, Command command) {
+        logger.debug("handle commmand channel: {} command: {} ", channelUID, command);
         if (command instanceof RefreshType) {
             switch (channelUID.getId()) {
                 case SoulissBindingConstants.ONOFF_CHANNEL:
@@ -128,17 +129,24 @@ public class SoulissT19Handler extends SoulissGenericHandler {
         super.setLastStatusStored();
         if (state != null) {
             updateState(SoulissBindingConstants.SLEEP_CHANNEL, OnOffType.OFF);
-            logger.debug("T19, setting state to {}", state.toFullString());
+            logger.debug("setState - T19, setting state to {}", state.toFullString());
             this.updateState(SoulissBindingConstants.ONOFF_CHANNEL, (OnOffType) state);
         }
     }
 
     public void setRawStateDimmerValue(byte dimmerValue) {
         try {
+            logger.debug("setRawStateDimmerValue - T19, setting raw state to {} current: {}", dimmerValue,
+                    t1nRawStateBrigthnessByte1);
             if (dimmerValue != t1nRawStateByte0 && dimmerValue >= 0) {
-                logger.debug("T19, setting dimmer to {}", dimmerValue);
+                logger.debug("T19, setting dimmer to {} current: {} -  UUID: {} - {}", dimmerValue,
+                        t1nRawStateBrigthnessByte1, this.getThing().getUID().getAsString(), this.getThing().getLabel());
+                logger.debug("llamada", new Exception());
                 updateState(SoulissBindingConstants.DIMMER_BRIGHTNESS_CHANNEL,
                         PercentType.valueOf(String.valueOf(Math.round(((double) dimmerValue / 255) * 100))));
+                logger.debug("T19, setting dimmer to {} current: {} -  UUID: {} - {}", dimmerValue,
+                        t1nRawStateBrigthnessByte1, this.getThing().getUID().getAsString(), this.getThing().getLabel());
+
             }
         } catch (Exception ex) {
             logger.warn("UUID: {}, had an update dimmer state error:{}", this.getThing().getUID().getAsString(),
@@ -148,13 +156,17 @@ public class SoulissT19Handler extends SoulissGenericHandler {
 
     @Override
     public void setRawState(byte rawState) {
+        logger.debug("setRawState - T19, setting raw state to {} current: {}", rawState, t1nRawStateByte0);
+        logger.debug("callstack", new Exception("setRawState"));
         // update Last Status stored time
         super.setLastStatusStored();
         // update item state only if it is different from previous
         if (t1nRawStateByte0 != rawState) {
             this.setState(getOhStateOnOffFromSoulissVal(rawState));
+            logger.debug("setRawState - setState - T19, done to {} current: {}", rawState, t1nRawStateByte0);
         }
         t1nRawStateByte0 = rawState;
+        logger.debug("setRawState - end - done to {} current: {}", rawState, t1nRawStateByte0);
     }
 
     @Override

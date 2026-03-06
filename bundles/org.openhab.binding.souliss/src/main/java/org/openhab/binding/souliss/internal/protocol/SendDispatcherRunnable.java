@@ -27,6 +27,7 @@ import org.openhab.binding.souliss.internal.handler.SoulissGatewayHandler;
 import org.openhab.binding.souliss.internal.handler.SoulissGenericHandler;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.Thing;
+import org.openhab.core.thing.ThingStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -217,9 +218,14 @@ public class SendDispatcherRunnable implements Runnable {
                 for (var j = 12; j < packetsList.get(i).getPacket().getData().length; j++) {
                     // I check the slot only if the command is different from ZERO
                     if ((packetsList.get(i).getPacket().getData()[j] != 0) && (this.gwHandler != null)) {
+
                         localTyp = getHandler(node, iSlot, this.logger);
+                        logger.debug("Node: {} Slot: {} LocalType: {} - Sending", node, iSlot, localTyp);
+                        boolean isOnline = false;
+                        bExpected = 0;
 
                         if (localTyp != null) {
+                            isOnline = localTyp.getThing().getStatus().equals(ThingStatus.ONLINE);
                             bExpected = localTyp.getExpectedRawState(packetsList.get(i).getPacket().getData()[j]);
 
                             // if the expected value of the typical is -1 then it means that the typical does not
@@ -240,35 +246,42 @@ public class SendDispatcherRunnable implements Runnable {
                                 sExpected = sExpected.length() < 2 ? "0x0" + sExpected.toUpperCase()
                                         : "0x" + sExpected.toUpperCase();
                                 logger.debug(
-                                        "Compare. Node: {} Slot: {} Node Name: {} Command: {} Expected Souliss State: {} - Actual OH item State: {}",
-                                        node, iSlot, localTyp.getLabel(), sCmd, sExpected, localTyp.getRawState());
+                                        "Compare. Node: {} Slot: {} Node Name: {} Command: {} Expected Souliss State: {} - Actual OH item State: {} - online: {}",
+                                        node, iSlot, localTyp.getLabel(), sCmd, sExpected, localTyp.getRawState(),
+                                        isOnline);
                             }
-
-                            if (localTyp != null && checkExpectedState(localTyp.getRawState(), bExpected)) {
-                                // if the value of the typical matches the value
-                                // transmitted then I set the byte to zero.
-                                // when all bytes are equal to zero then
-                                // delete the frame
-                                packetsList.get(i).getPacket().getData()[j] = 0;
-                                logger.debug("{} Node: {} Slot: {} - OK Expected State", localTyp.getLabel(), node,
-                                        iSlot);
-                            } else if (localTyp == null) {
-                                if (bExpected < 0) {
-                                    // if the typical is not managed then I set the byte of the relative slot to zero
-                                    packetsList.get(i).getPacket().getData()[j] = 0;
-                                } else {
-                                    // if there is no typical at slot j then it means that it is one
-                                    // slot
-                                    // connected
-                                    // to the previous one (ex: RGB, T31, ...)
-                                    // then if slot j-1 = 0 then j can also be set to 0
-                                    if (packetsList.get(i).getPacket().getData()[j - 1] == 0) {
-                                        packetsList.get(i).getPacket().getData()[j] = 0;
-                                    }
-                                }
-
-                            }
+                        } else {
+                            logger.debug("Node: {} Slot: {} - Local type is NULL", node, iSlot);
                         }
+
+                        if (localTyp != null && checkExpectedState(localTyp.getRawState(), bExpected) && isOnline) {
+                            // if the value of the typical matches the value
+                            // transmitted then I set the byte to zero.
+                            // when all bytes are equal to zero then
+                            // delete the frame
+                            packetsList.get(i).getPacket().getData()[j] = 0;
+                            logger.debug("{} Node: {} Slot: {} - OK Expected State", localTyp.getLabel(), node, iSlot);
+                        } else if (!isOnline) {
+                            // if offline mas as sent
+                            packetsList.get(i).getPacket().getData()[j] = 0;
+                            logger.debug("{} Node: {} Slot: {} - is not ONLINE", localTyp.getLabel(), node, iSlot);
+                        } else if (localTyp == null) {
+                            if (bExpected < 0 || !isOnline) {
+                                // if the typical is not managed then I set the byte of the relative slot to zero
+                                packetsList.get(i).getPacket().getData()[j] = 0;
+                            } else {
+                                // if there is no typical at slot j then it means that it is one
+                                // slot
+                                // connected
+                                // to the previous one (ex: RGB, T31, ...)
+                                // then if slot j-1 = 0 then j can also be set to 0
+                                if (packetsList.get(i).getPacket().getData()[j - 1] == 0) {
+                                    packetsList.get(i).getPacket().getData()[j] = 0;
+                                }
+                            }
+
+                        }
+
                     }
                     iSlot++;
                 }
@@ -289,10 +302,18 @@ public class SendDispatcherRunnable implements Runnable {
                         if ((localGwHandler.getGwConfig().timeoutToRequeue < time - packetsList.get(i).getTime())
                                 && (localGwHandler.getGwConfig().timeoutToRemovePacket < time
                                         - packetsList.get(i).getTime())) {
-                            logger.debug("Packet Execution timeout - Removed");
+                            logger.debug("Packet Execution timeout ({}ms,{}ms) value {}ms - Removed",
+                                    localGwHandler.getGwConfig().timeoutToRequeue,
+                                    localGwHandler.getGwConfig().timeoutToRemovePacket,
+                                    time - packetsList.get(i).getTime());
                             packetsList.remove(i);
+                            // } else if (localGwHandler.getGwConfig().timeoutToRemovePacket < time
+                            // - packetsList.get(i).getTime()) {
                         } else {
-                            logger.debug("Packet Execution timeout - Requeued");
+                            logger.debug("Packet Execution timeout ({}ms,{}ms) value {}ms - Requeued",
+                                    localGwHandler.getGwConfig().timeoutToRequeue,
+                                    localGwHandler.getGwConfig().timeoutToRemovePacket,
+                                    time - packetsList.get(i).getTime());
                             packetsList.get(i).setSent(false);
                         }
 

@@ -173,8 +173,12 @@ public abstract class SoulissGenericHandler extends BaseThingHandler implements 
     }
 
     public void setHealthy(byte shHealthy) {
-        this.updateState(SoulissBindingConstants.HEALTHY_CHANNEL, new DecimalType(shHealthy & 0xFF));
-        this.updateStatus(ThingStatus.ONLINE);
+        int health = shHealthy & 0xFF;
+        this.updateState(SoulissBindingConstants.HEALTHY_CHANNEL, new DecimalType(health));
+        if (health > 128)
+            this.updateStatus(ThingStatus.ONLINE);
+        else
+            this.updateStatus(ThingStatus.OFFLINE);
     }
 
     public void setLastStatusStored() {
