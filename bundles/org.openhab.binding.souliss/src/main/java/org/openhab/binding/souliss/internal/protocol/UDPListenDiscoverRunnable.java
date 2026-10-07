@@ -84,7 +84,8 @@ public class UDPListenDiscoverRunnable implements Runnable {
                     }
                 }
             } catch (BindException e) {
-                logger.warn("UDP Port busy, Souliss already listening? {}", e.getMessage(), e);
+                // one line, no stack trace: the loop retries at once while the port stays busy
+                logger.warn("UDP Port busy, Souliss already listening? {}", e.getMessage());
                 try {
                     if (socket != null && !socket.isClosed()) {
                         socket.close();

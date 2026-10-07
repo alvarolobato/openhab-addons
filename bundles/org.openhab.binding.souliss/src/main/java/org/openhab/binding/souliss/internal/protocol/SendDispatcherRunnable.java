@@ -67,6 +67,21 @@ public class SendDispatcherRunnable implements Runnable {
             logger.debug("Push packet in queue - Node {}", node);
         }
 
+        if (node >= 0) {
+            // A packet that is out waiting for its confirmation cannot take this command (see below), and
+            // would go on resending what it holds for the same slots: the new command replaces it there.
+            for (var i = 0; i < packetsList.size(); i++) {
+                if (packetsList.get(i).getSent() && getNode(packetsList.get(i).getPacket()) == node) {
+                    byte[] sent = packetsList.get(i).getPacket().getData();
+                    for (var j = 12; j < Math.min(sent.length, packetToPUT.getData().length); j++) {
+                        if (packetToPUT.getData()[j] != 0) {
+                            sent[j] = 0;
+                        }
+                    }
+                }
+            }
+        }
+
         if (packetsList.isEmpty() || node < 0) {
             bPacchettoGestito = false;
         } else {
@@ -281,19 +296,9 @@ public class SendDispatcherRunnable implements Runnable {
                             packetsList.get(i).getPacket().getData()[j] = 0;
                             logger.debug("{} Node: {} Slot: {} - is not ONLINE", localTyp.getLabel(), node, iSlot);
                         } else if (localTyp == null) {
-                            if (bExpected < 0 || !isOnline) {
-                                // if the typical is not managed then I set the byte of the relative slot to zero
-                                packetsList.get(i).getPacket().getData()[j] = 0;
-                            } else {
-                                // if there is no typical at slot j then it means that it is one
-                                // slot
-                                // connected
-                                // to the previous one (ex: RGB, T31, ...)
-                                // then if slot j-1 = 0 then j can also be set to 0
-                                if (packetsList.get(i).getPacket().getData()[j - 1] == 0) {
-                                    packetsList.get(i).getPacket().getData()[j] = 0;
-                                }
-                            }
+                            // no typical at this slot (a slot related to the previous one: RGB, T31, ...), or
+                            // one without secure send: sent once, so I set the byte of the slot to zero
+                            packetsList.get(i).getPacket().getData()[j] = 0;
                         }
                     }
                     if (packetsList.get(i).getPacket().getData()[j] != 0 && !kept) {
@@ -329,12 +334,38 @@ public class SendDispatcherRunnable implements Runnable {
                                     localGwHandler.getGwConfig().timeoutToRemovePacket,
                                     time - packetsList.get(i).getTime());
                             packetsList.get(i).setSent(false);
+                            // pop() takes the first packet not sent: left in place, this one would be resent
+                            // until its confirmation while the packets for the other nodes wait behind it
+                            if (moveBehindOtherNodes(i)) {
+                                i--;
+                            }
                         }
 
                     }
                 }
             }
         }
+    }
+
+    /**
+     * Move a packet that is queued for another send to the end of the list, so that the packets waiting
+     * behind it go out first. It stays where it is when a later packet addresses the same node: that one
+     * holds a newer command and must be sent after it.
+     *
+     * @return true if the packet was moved
+     */
+    private static boolean moveBehindOtherNodes(int index) {
+        int node = getNode(packetsList.get(index).getPacket());
+        for (var k = index + 1; k < packetsList.size(); k++) {
+            if (getNode(packetsList.get(k).getPacket()) == node) {
+                return false;
+            }
+        }
+        if (index == packetsList.size() - 1) {
+            return false;
+        }
+        packetsList.add(packetsList.remove(index));
+        return true;
     }
 
     private @Nullable SoulissGenericHandler getHandler(int node, int slot, Logger logger) {

@@ -55,7 +55,7 @@ public class SoulissT19Handler extends SoulissGenericHandler {
 
     @Override
     public void handleCommand(ChannelUID channelUID, Command command) {
-        logger.debug("handle commmand channel: {} command: {} ", channelUID, command);
+        logger.debug("handle command channel: {} command: {} ", channelUID, command);
         if (command instanceof RefreshType) {
             switch (channelUID.getId()) {
                 case SoulissBindingConstants.ONOFF_CHANNEL:

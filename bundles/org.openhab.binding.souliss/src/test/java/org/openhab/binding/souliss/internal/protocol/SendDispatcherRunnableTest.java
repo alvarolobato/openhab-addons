@@ -195,16 +195,78 @@ class SendDispatcherRunnableTest {
     }
 
     @Test
-    void wallSwitchDuringTheResendsIsTakenBackToTheCommandedState() {
+    void keptCommandWhoseStateGoesBackWaitsForItsConfirmationAgain() {
+        // On a node a wall switch does not get this far: it starts a fade out that the next resend of
+        // the ON takes back before the light reports OFF. This is the dispatcher's side only.
         SoulissT19Handler ambient = dimmer(27, IS_ON);
-        dimmer(33, IS_ON);
+        SoulissT19Handler strip = dimmer(33, IS_ON);
         byte[] frame = send(27, ON, 33, OFF);
 
         cycle();
         ambient.setRawState(IS_OFF);
+        strip.setRawState(IS_OFF);
         cycle();
 
         assertEquals(ON, frame[12 + 27]);
         assertTrue(queued(), "the ON waits for its confirmation again");
+    }
+
+    @Test
+    void packetThatWaitsForItsConfirmationLetsTheOtherNodesGoFirst() {
+        // pop() sends the first packet not sent yet. A dimmer OFF is resent for its whole fade out, and
+        // would hold back the commands for every other node until then.
+        dimmer(43, IS_ON);
+        byte[] fading = send(43, OFF);
+        cycle();
+
+        byte[] other = new byte[12 + 3];
+        other[7] = SoulissUDPConstants.SOULISS_UDP_FUNCTION_FORCE;
+        other[10] = NODE + 1;
+        other[12 + 2] = ON;
+        SendDispatcherRunnable.put(new DatagramPacket(other, other.length), logger);
+        SendDispatcherRunnable.packetsList.get(0).setSent(true);
+        dispatcher.safeSendCheck();
+
+        assertEquals(2, SendDispatcherRunnable.packetsList.size());
+        assertEquals(other, SendDispatcherRunnable.packetsList.get(0).getPacket().getData());
+        assertEquals(fading, SendDispatcherRunnable.packetsList.get(1).getPacket().getData());
+        assertFalse(SendDispatcherRunnable.packetsList.get(1).getSent(), "still queued for another send");
+    }
+
+    @Test
+    void newerCommandReplacesWhatAPacketOnItsWayHoldsForTheSameSlot() {
+        // The packet is out (sent, not checked yet), so the new command cannot be merged into it. Left
+        // alone, its kept ON would be resent against the OFF that follows.
+        SoulissT19Handler ambient = dimmer(27, IS_OFF);
+        dimmer(33, IS_ON);
+        byte[] first = send(27, ON, 33, OFF);
+        cycle();
+        ambient.setRawState(IS_ON);
+        cycle();
+        assertEquals(ON, first[12 + 27]);
+
+        SendDispatcherRunnable.packetsList.get(0).setSent(true);
+        byte[] second = send(27, OFF);
+
+        assertEquals(0, first[12 + 27], "the older packet no longer commands the slot");
+        assertEquals(OFF, first[12 + 33], "its other commands stay");
+        assertEquals(OFF, second[12 + 27]);
+        assertEquals(2, SendDispatcherRunnable.packetsList.size());
+    }
+
+    @Test
+    void packetStaysAheadOfANewerOneForTheSameNode() {
+        // A command queued while the first packet was out is newer: it has to be sent after it.
+        dimmer(43, IS_ON);
+        dimmer(27, IS_OFF);
+        byte[] first = send(43, OFF);
+        SendDispatcherRunnable.packetsList.get(0).setSent(true);
+        SendDispatcherRunnable.packetsList.get(0).setTime(System.currentTimeMillis());
+        send(27, ON);
+
+        dispatcher.safeSendCheck();
+
+        assertEquals(2, SendDispatcherRunnable.packetsList.size());
+        assertEquals(first, SendDispatcherRunnable.packetsList.get(0).getPacket().getData());
     }
 }
