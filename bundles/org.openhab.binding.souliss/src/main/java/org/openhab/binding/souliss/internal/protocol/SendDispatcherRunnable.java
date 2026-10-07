@@ -201,6 +201,14 @@ public class SendDispatcherRunnable implements Runnable {
      * commands was executed there delete packet in list.
      */
     public void safeSendCheck() {
+        // Same lock as put(): a command merged into a packet while its bytes are being checked would be
+        // zeroed as confirmed without ever being sent.
+        synchronized (SendDispatcherRunnable.class) {
+            checkSentPackets();
+        }
+    }
+
+    private void checkSentPackets() {
         int node;
         int iSlot;
         SoulissGenericHandler localTyp;
@@ -215,7 +223,10 @@ public class SendDispatcherRunnable implements Runnable {
             if (packetsList.get(i).getSent()) {
                 node = getNode(packetsList.get(i).getPacket());
                 iSlot = 0;
+                // true while a command of the packet still waits for its confirmation
+                var pending = false;
                 for (var j = 12; j < packetsList.get(i).getPacket().getData().length; j++) {
+                    var kept = false;
                     // I check the slot only if the command is different from ZERO
                     if ((packetsList.get(i).getPacket().getData()[j] != 0) && (this.gwHandler != null)) {
                         localTyp = getHandler(node, iSlot, this.logger);
@@ -258,7 +269,12 @@ public class SendDispatcherRunnable implements Runnable {
                             // transmitted then I set the byte to zero.
                             // when all bytes are equal to zero then
                             // delete the frame
-                            packetsList.get(i).getPacket().getData()[j] = 0;
+                            if (localTyp.keepCommandWhileResending(packetsList.get(i).getPacket().getData()[j])) {
+                                // confirmed, but a zero here in a resend for another slot would stop it
+                                kept = true;
+                            } else {
+                                packetsList.get(i).getPacket().getData()[j] = 0;
+                            }
                             logger.debug("{} Node: {} Slot: {} - OK Expected State", localTyp.getLabel(), node, iSlot);
                         } else if (localTyp != null && !isOnline) {
                             // if offline mark as sent
@@ -280,13 +296,16 @@ public class SendDispatcherRunnable implements Runnable {
                             }
                         }
                     }
+                    if (packetsList.get(i).getPacket().getData()[j] != 0 && !kept) {
+                        pending = true;
+                    }
                     iSlot++;
                 }
 
-                // if the value of all bytes that make up the packet is 0 then I remove the packet from
-                // list
+                // if no command of the packet waits for its confirmation any more (its byte is 0, or it was
+                // only kept for the resends) then I remove the packet from list
                 // also if the timout has elapsed then I set the packet to be resent
-                if (checkAllsSlotZero(packetsList.get(i).getPacket())) {
+                if (!pending) {
                     logger.debug("Command packet executed - Removed");
                     packetsList.remove(i);
                 } else {
@@ -350,16 +369,6 @@ public class SendDispatcherRunnable implements Runnable {
         return itemState == expectedState;
     }
 
-    private static boolean checkAllsSlotZero(DatagramPacket packet) {
-        var bflag = true;
-        for (var j = 12; j < packet.getData().length; j++) {
-            if ((packet.getData()[j] != 0)) {
-                bflag = false;
-            }
-        }
-        return bflag;
-    }
-
     long t = 0;
     long tPrec = 0;
 
@@ -368,7 +377,7 @@ public class SendDispatcherRunnable implements Runnable {
      */
     @Nullable
     private synchronized PacketStruct pop() {
-        synchronized (this) {
+        synchronized (SendDispatcherRunnable.class) {
             SoulissGatewayHandler localGwHandler = this.gwHandler;
 
             // don't pop if bPopSuspend = true

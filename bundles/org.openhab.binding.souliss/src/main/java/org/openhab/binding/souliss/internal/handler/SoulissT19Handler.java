@@ -125,9 +125,9 @@ public class SoulissT19Handler extends SoulissGenericHandler {
         if (configurationMap.get(SoulissBindingConstants.SLEEP_CHANNEL) != null) {
             xSleepTime = ((BigDecimal) configurationMap.get(SoulissBindingConstants.SLEEP_CHANNEL)).byteValue();
         }
-        if (configurationMap.get(SoulissBindingConstants.CONFIG_SECURE_SEND) != null) {
-            bSecureSend = ((Boolean) configurationMap.get(SoulissBindingConstants.CONFIG_SECURE_SEND)).booleanValue();
-        }
+        // On unless it is switched off: the same default as in thing-types.xml, for a thing whose
+        // configuration reaches the handler without it.
+        bSecureSend = !Boolean.FALSE.equals(configurationMap.get(SoulissBindingConstants.CONFIG_SECURE_SEND));
     }
 
     public void setState(@Nullable PrimitiveType state) {
@@ -198,11 +198,17 @@ public class SoulissT19Handler extends SoulissGenericHandler {
                 return SoulissProtocolConstants.SOULISS_T1N_ON_COIL;
             } else if (bCmd == SoulissProtocolConstants.SOULISS_T1N_OFF_CMD) {
                 return SoulissProtocolConstants.SOULISS_T1N_OFF_COIL;
-            } else if (bCmd >= SoulissProtocolConstants.SOULISS_T1N_TIMED) {
-                // SLEEP
-                return SoulissProtocolConstants.SOULISS_T1N_ON_COIL;
             }
+            // SLEEP is sent once: the node answers it with the good night state, never with ON_COIL, so it
+            // could not be confirmed and every resend would restart the countdown.
         }
         return -1;
+    }
+
+    @Override
+    public boolean keepCommandWhileResending(byte bCmd) {
+        // The node reports ON at the first step of the fade in, and only goes on fading while the command
+        // stays in its input slot. An OFF is confirmed when its fade out has ended, so it can be dropped.
+        return bSecureSend && bCmd == SoulissProtocolConstants.SOULISS_T1N_ON_CMD;
     }
 }

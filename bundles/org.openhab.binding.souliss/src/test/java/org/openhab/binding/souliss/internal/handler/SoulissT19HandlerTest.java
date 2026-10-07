@@ -19,6 +19,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.io.InputStream;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import org.openhab.binding.souliss.internal.SoulissBindingConstants;
 import org.openhab.binding.souliss.internal.SoulissProtocolConstants;
 import org.openhab.core.config.core.Configuration;
+import org.openhab.core.library.types.PercentType;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingUID;
@@ -130,8 +132,7 @@ class SoulissT19HandlerTest {
     void withSecureSendOnAndOffAreResentUntilTheNodeConfirms() {
         Thing thing = mock(Thing.class);
         when(thing.getUID()).thenReturn(THING);
-        when(thing.getConfiguration())
-                .thenReturn(new Configuration(Map.of("node", 1, "slot", 2, "secureSend", true)));
+        when(thing.getConfiguration()).thenReturn(new Configuration(Map.of("node", 1, "slot", 2, "secureSend", true)));
         SoulissT19Handler secure = new SoulissT19Handler(thing);
         secure.setCallback(mock(ThingHandlerCallback.class));
         secure.initialize();
@@ -142,6 +143,45 @@ class SoulissT19HandlerTest {
                 secure.getExpectedRawState(SoulissProtocolConstants.SOULISS_T1N_ON_CMD));
         // A brightness is not confirmed by the on/off state: sent once.
         assertEquals(-1, secure.getExpectedRawState(SoulissProtocolConstants.SOULISS_T1N_SET));
+    }
+
+    private SoulissT19Handler initialized(Map<String, Object> configuration) {
+        Thing thing = mock(Thing.class);
+        when(thing.getUID()).thenReturn(THING);
+        when(thing.getConfiguration()).thenReturn(new Configuration(configuration));
+        SoulissT19Handler h = new SoulissT19Handler(thing);
+        h.setCallback(mock(ThingHandlerCallback.class));
+        h.initialize();
+        return h;
+    }
+
+    @Test
+    void secureSendIsOnWhenTheThingDoesNotSetIt() {
+        SoulissT19Handler byDefault = initialized(Map.of("node", 1, "slot", 2));
+        SoulissT19Handler switchedOff = initialized(Map.of("node", 1, "slot", 2, "secureSend", false));
+
+        assertEquals(SoulissProtocolConstants.SOULISS_T1N_OFF_COIL,
+                byDefault.getExpectedRawState(SoulissProtocolConstants.SOULISS_T1N_OFF_CMD));
+        assertEquals(true, byDefault.keepCommandWhileResending(SoulissProtocolConstants.SOULISS_T1N_ON_CMD));
+        assertEquals(-1, switchedOff.getExpectedRawState(SoulissProtocolConstants.SOULISS_T1N_OFF_CMD));
+        assertEquals(false, switchedOff.keepCommandWhileResending(SoulissProtocolConstants.SOULISS_T1N_ON_CMD));
+    }
+
+    @Test
+    void onlyOnIsKeptInAPacketThatIsStillResent() {
+        SoulissT19Handler secure = initialized(Map.of("node", 1, "slot", 2));
+
+        // An OFF is confirmed when its fade out has ended: nothing left to protect.
+        assertEquals(false, secure.keepCommandWhileResending(SoulissProtocolConstants.SOULISS_T1N_OFF_CMD));
+        assertEquals(false, secure.keepCommandWhileResending(SoulissProtocolConstants.SOULISS_T1N_SET));
+    }
+
+    @Test
+    void sleepIsSentOnce() {
+        // The node answers it with the good night state, so an expected ON_COIL could never be confirmed.
+        SoulissT19Handler secure = initialized(Map.of("node", 1, "slot", 2));
+
+        assertEquals(-1, secure.getExpectedRawState((byte) (SoulissProtocolConstants.SOULISS_T1N_TIMED + 5)));
     }
 
     @Test
@@ -156,6 +196,29 @@ class SoulissT19HandlerTest {
 
             assertEquals("true", value);
         }
+    }
+
+    @Test
+    void brightnessCommandKeepsOneLevelPrecision() {
+        // The percent used to be truncated to a whole number first: 2.75 % went out as level 5, not 7.
+        List<Integer> sent = new ArrayList<>();
+        Thing thing = mock(Thing.class);
+        when(thing.getUID()).thenReturn(THING);
+        SoulissT19Handler capturing = new SoulissT19Handler(thing) {
+            @Override
+            public void commandSEND(byte command, byte level) {
+                assertEquals(SoulissProtocolConstants.SOULISS_T1N_SET, command);
+                sent.add(level & 0xFF);
+            }
+        };
+        capturing.setCallback(mock(ThingHandlerCallback.class));
+        ChannelUID channel = new ChannelUID(THING, SoulissBindingConstants.DIMMER_BRIGHTNESS_CHANNEL);
+
+        for (String percent : List.of("0", "0.39", "2.75", "50", "66.67", "99.61", "100")) {
+            capturing.handleCommand(channel, new PercentType(new BigDecimal(percent)));
+        }
+
+        assertEquals(List.of(0, 1, 7, 128, 170, 254, 255), sent);
     }
 
     @Test
