@@ -18,13 +18,19 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.xpath.XPathFactory;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.junit.jupiter.api.Test;
 import org.openhab.binding.souliss.internal.SoulissBindingConstants;
 import org.openhab.binding.souliss.internal.SoulissProtocolConstants;
+import org.openhab.core.config.core.Configuration;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingUID;
@@ -118,6 +124,38 @@ class SoulissT19HandlerTest {
                 RefreshType.REFRESH);
 
         assertEquals(List.of(), brightness);
+    }
+
+    @Test
+    void withSecureSendOnAndOffAreResentUntilTheNodeConfirms() {
+        Thing thing = mock(Thing.class);
+        when(thing.getUID()).thenReturn(THING);
+        when(thing.getConfiguration())
+                .thenReturn(new Configuration(Map.of("node", 1, "slot", 2, "secureSend", true)));
+        SoulissT19Handler secure = new SoulissT19Handler(thing);
+        secure.setCallback(mock(ThingHandlerCallback.class));
+        secure.initialize();
+
+        assertEquals(SoulissProtocolConstants.SOULISS_T1N_OFF_COIL,
+                secure.getExpectedRawState(SoulissProtocolConstants.SOULISS_T1N_OFF_CMD));
+        assertEquals(SoulissProtocolConstants.SOULISS_T1N_ON_COIL,
+                secure.getExpectedRawState(SoulissProtocolConstants.SOULISS_T1N_ON_CMD));
+        // A brightness is not confirmed by the on/off state: sent once.
+        assertEquals(-1, secure.getExpectedRawState(SoulissProtocolConstants.SOULISS_T1N_SET));
+    }
+
+    @Test
+    void secureSendIsOnByDefaultForT19() throws Exception {
+        // Without it an OFF is sent once and its byte is zeroed in the queued packet, so a packet resent
+        // for another light of the node carries "no command" for this one and stops its fade half way.
+        try (InputStream xml = getClass().getResourceAsStream("/OH-INF/thing/thing-types.xml")) {
+            var doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(xml);
+            String value = XPathFactory.newInstance().newXPath().evaluate(
+                    "//*[local-name()='thing-type'][@id='t19']//*[local-name()='parameter'][@name='secureSend']/*[local-name()='default']",
+                    doc);
+
+            assertEquals("true", value);
+        }
     }
 
     @Test
