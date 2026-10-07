@@ -195,7 +195,8 @@ public class SendDispatcherRunnable implements Runnable {
         // 7 is the byte of the VNet frame at which I find the command code
         // 10 is the byte of the VNet frame at which I find the node ID
         if (packet.getData()[7] == SoulissUDPConstants.SOULISS_UDP_FUNCTION_FORCE) {
-            return packet.getData()[10];
+            // unsigned: a node above 127 would come out negative, the value that means "not a FORCE"
+            return Byte.toUnsignedInt(packet.getData()[10]);
         }
         return -1;
     }

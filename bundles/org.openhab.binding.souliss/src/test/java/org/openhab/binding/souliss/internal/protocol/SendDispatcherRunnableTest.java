@@ -255,6 +255,24 @@ class SendDispatcherRunnableTest {
     }
 
     @Test
+    void framesForANodeAbove127AreMergedLikeAnyOther() {
+        byte[] first = new byte[12 + 4];
+        first[7] = SoulissUDPConstants.SOULISS_UDP_FUNCTION_FORCE;
+        first[10] = (byte) 200;
+        first[12 + 3] = ON;
+        byte[] second = first.clone();
+        second[12 + 3] = 0;
+        second[12 + 1] = OFF;
+
+        SendDispatcherRunnable.put(new DatagramPacket(first, first.length), logger);
+        SendDispatcherRunnable.put(new DatagramPacket(second, second.length), logger);
+
+        assertEquals(1, SendDispatcherRunnable.packetsList.size());
+        assertEquals(OFF, first[12 + 1]);
+        assertEquals(ON, first[12 + 3]);
+    }
+
+    @Test
     void packetStaysAheadOfANewerOneForTheSameNode() {
         // A command queued while the first packet was out is newer: it has to be sent after it.
         dimmer(43, IS_ON);
