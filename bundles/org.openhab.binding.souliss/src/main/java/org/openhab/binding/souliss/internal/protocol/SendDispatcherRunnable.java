@@ -27,6 +27,7 @@ import org.openhab.binding.souliss.internal.handler.SoulissGatewayHandler;
 import org.openhab.binding.souliss.internal.handler.SoulissGenericHandler;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.Thing;
+import org.openhab.core.thing.ThingStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -64,6 +65,21 @@ public class SendDispatcherRunnable implements Runnable {
         int node = getNode(packetToPUT);
         if (node >= 0) {
             logger.debug("Push packet in queue - Node {}", node);
+        }
+
+        if (node >= 0) {
+            // A packet that is out waiting for its confirmation cannot take this command (see below), and
+            // would go on resending what it holds for the same slots: the new command replaces it there.
+            for (var i = 0; i < packetsList.size(); i++) {
+                if (packetsList.get(i).getSent() && getNode(packetsList.get(i).getPacket()) == node) {
+                    byte[] sent = packetsList.get(i).getPacket().getData();
+                    for (var j = 12; j < Math.min(sent.length, packetToPUT.getData().length); j++) {
+                        if (packetToPUT.getData()[j] != 0) {
+                            sent[j] = 0;
+                        }
+                    }
+                }
+            }
         }
 
         if (packetsList.isEmpty() || node < 0) {
@@ -179,7 +195,8 @@ public class SendDispatcherRunnable implements Runnable {
         // 7 is the byte of the VNet frame at which I find the command code
         // 10 is the byte of the VNet frame at which I find the node ID
         if (packet.getData()[7] == SoulissUDPConstants.SOULISS_UDP_FUNCTION_FORCE) {
-            return packet.getData()[10];
+            // unsigned: a node above 127 would come out negative, the value that means "not a FORCE"
+            return Byte.toUnsignedInt(packet.getData()[10]);
         }
         return -1;
     }
@@ -200,6 +217,14 @@ public class SendDispatcherRunnable implements Runnable {
      * commands was executed there delete packet in list.
      */
     public void safeSendCheck() {
+        // Same lock as put(): a command merged into a packet while its bytes are being checked would be
+        // zeroed as confirmed without ever being sent.
+        synchronized (SendDispatcherRunnable.class) {
+            checkSentPackets();
+        }
+    }
+
+    private void checkSentPackets() {
         int node;
         int iSlot;
         SoulissGenericHandler localTyp;
@@ -214,12 +239,19 @@ public class SendDispatcherRunnable implements Runnable {
             if (packetsList.get(i).getSent()) {
                 node = getNode(packetsList.get(i).getPacket());
                 iSlot = 0;
+                // true while a command of the packet still waits for its confirmation
+                var pending = false;
                 for (var j = 12; j < packetsList.get(i).getPacket().getData().length; j++) {
+                    var kept = false;
                     // I check the slot only if the command is different from ZERO
                     if ((packetsList.get(i).getPacket().getData()[j] != 0) && (this.gwHandler != null)) {
                         localTyp = getHandler(node, iSlot, this.logger);
+                        logger.debug("Node: {} Slot: {} LocalType: {} - Sending", node, iSlot, localTyp);
+                        boolean isOnline = false;
+                        bExpected = 0;
 
                         if (localTyp != null) {
+                            isOnline = localTyp.getThing().getStatus().equals(ThingStatus.ONLINE);
                             bExpected = localTyp.getExpectedRawState(packetsList.get(i).getPacket().getData()[j]);
 
                             // if the expected value of the typical is -1 then it means that the typical does not
@@ -240,43 +272,46 @@ public class SendDispatcherRunnable implements Runnable {
                                 sExpected = sExpected.length() < 2 ? "0x0" + sExpected.toUpperCase()
                                         : "0x" + sExpected.toUpperCase();
                                 logger.debug(
-                                        "Compare. Node: {} Slot: {} Node Name: {} Command: {} Expected Souliss State: {} - Actual OH item State: {}",
-                                        node, iSlot, localTyp.getLabel(), sCmd, sExpected, localTyp.getRawState());
+                                        "Compare. Node: {} Slot: {} Node Name: {} Command: {} Expected Souliss State: {} - Actual OH item State: {} - online: {}",
+                                        node, iSlot, localTyp.getLabel(), sCmd, sExpected, localTyp.getRawState(),
+                                        isOnline);
                             }
-
-                            if (localTyp != null && checkExpectedState(localTyp.getRawState(), bExpected)) {
-                                // if the value of the typical matches the value
-                                // transmitted then I set the byte to zero.
-                                // when all bytes are equal to zero then
-                                // delete the frame
-                                packetsList.get(i).getPacket().getData()[j] = 0;
-                                logger.debug("{} Node: {} Slot: {} - OK Expected State", localTyp.getLabel(), node,
-                                        iSlot);
-                            } else if (localTyp == null) {
-                                if (bExpected < 0) {
-                                    // if the typical is not managed then I set the byte of the relative slot to zero
-                                    packetsList.get(i).getPacket().getData()[j] = 0;
-                                } else {
-                                    // if there is no typical at slot j then it means that it is one
-                                    // slot
-                                    // connected
-                                    // to the previous one (ex: RGB, T31, ...)
-                                    // then if slot j-1 = 0 then j can also be set to 0
-                                    if (packetsList.get(i).getPacket().getData()[j - 1] == 0) {
-                                        packetsList.get(i).getPacket().getData()[j] = 0;
-                                    }
-                                }
-
-                            }
+                        } else {
+                            logger.debug("Node: {} Slot: {} - Local type is NULL", node, iSlot);
                         }
+
+                        if (localTyp != null && checkExpectedState(localTyp.getRawState(), bExpected) && isOnline) {
+                            // if the value of the typical matches the value
+                            // transmitted then I set the byte to zero.
+                            // when all bytes are equal to zero then
+                            // delete the frame
+                            if (localTyp.keepCommandWhileResending(packetsList.get(i).getPacket().getData()[j])) {
+                                // confirmed, but a zero here in a resend for another slot would stop it
+                                kept = true;
+                            } else {
+                                packetsList.get(i).getPacket().getData()[j] = 0;
+                            }
+                            logger.debug("{} Node: {} Slot: {} - OK Expected State", localTyp.getLabel(), node, iSlot);
+                        } else if (localTyp != null && !isOnline) {
+                            // if offline mark as sent
+                            packetsList.get(i).getPacket().getData()[j] = 0;
+                            logger.debug("{} Node: {} Slot: {} - is not ONLINE", localTyp.getLabel(), node, iSlot);
+                        } else if (localTyp == null) {
+                            // no typical at this slot (a slot related to the previous one: RGB, T31, ...), or
+                            // one without secure send: sent once, so I set the byte of the slot to zero
+                            packetsList.get(i).getPacket().getData()[j] = 0;
+                        }
+                    }
+                    if (packetsList.get(i).getPacket().getData()[j] != 0 && !kept) {
+                        pending = true;
                     }
                     iSlot++;
                 }
 
-                // if the value of all bytes that make up the packet is 0 then I remove the packet from
-                // list
+                // if no command of the packet waits for its confirmation any more (its byte is 0, or it was
+                // only kept for the resends) then I remove the packet from list
                 // also if the timout has elapsed then I set the packet to be resent
-                if (checkAllsSlotZero(packetsList.get(i).getPacket())) {
+                if (!pending) {
                     logger.debug("Command packet executed - Removed");
                     packetsList.remove(i);
                 } else {
@@ -289,17 +324,49 @@ public class SendDispatcherRunnable implements Runnable {
                         if ((localGwHandler.getGwConfig().timeoutToRequeue < time - packetsList.get(i).getTime())
                                 && (localGwHandler.getGwConfig().timeoutToRemovePacket < time
                                         - packetsList.get(i).getTime())) {
-                            logger.debug("Packet Execution timeout - Removed");
+                            logger.debug("Packet Execution timeout ({}ms,{}ms) value {}ms - Removed",
+                                    localGwHandler.getGwConfig().timeoutToRequeue,
+                                    localGwHandler.getGwConfig().timeoutToRemovePacket,
+                                    time - packetsList.get(i).getTime());
                             packetsList.remove(i);
                         } else {
-                            logger.debug("Packet Execution timeout - Requeued");
+                            logger.debug("Packet Execution timeout ({}ms,{}ms) value {}ms - Requeued",
+                                    localGwHandler.getGwConfig().timeoutToRequeue,
+                                    localGwHandler.getGwConfig().timeoutToRemovePacket,
+                                    time - packetsList.get(i).getTime());
                             packetsList.get(i).setSent(false);
+                            // pop() takes the first packet not sent: left in place, this one would be resent
+                            // until its confirmation while the packets for the other nodes wait behind it
+                            if (moveBehindOtherNodes(i)) {
+                                i--;
+                            }
                         }
 
                     }
                 }
             }
         }
+    }
+
+    /**
+     * Move a packet that is queued for another send to the end of the list, so that the packets waiting
+     * behind it go out first. It stays where it is when a later packet addresses the same node: that one
+     * holds a newer command and must be sent after it.
+     *
+     * @return true if the packet was moved
+     */
+    private static boolean moveBehindOtherNodes(int index) {
+        int node = getNode(packetsList.get(index).getPacket());
+        for (var k = index + 1; k < packetsList.size(); k++) {
+            if (getNode(packetsList.get(k).getPacket()) == node) {
+                return false;
+            }
+        }
+        if (index == packetsList.size() - 1) {
+            return false;
+        }
+        packetsList.add(packetsList.remove(index));
+        return true;
     }
 
     private @Nullable SoulissGenericHandler getHandler(int node, int slot, Logger logger) {
@@ -334,16 +401,6 @@ public class SendDispatcherRunnable implements Runnable {
         return itemState == expectedState;
     }
 
-    private static boolean checkAllsSlotZero(DatagramPacket packet) {
-        var bflag = true;
-        for (var j = 12; j < packet.getData().length; j++) {
-            if ((packet.getData()[j] != 0)) {
-                bflag = false;
-            }
-        }
-        return bflag;
-    }
-
     long t = 0;
     long tPrec = 0;
 
@@ -352,7 +409,7 @@ public class SendDispatcherRunnable implements Runnable {
      */
     @Nullable
     private synchronized PacketStruct pop() {
-        synchronized (this) {
+        synchronized (SendDispatcherRunnable.class) {
             SoulissGatewayHandler localGwHandler = this.gwHandler;
 
             // don't pop if bPopSuspend = true

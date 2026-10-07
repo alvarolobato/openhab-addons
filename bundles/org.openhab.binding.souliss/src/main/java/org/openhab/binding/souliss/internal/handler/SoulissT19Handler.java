@@ -13,6 +13,7 @@
 package org.openhab.binding.souliss.internal.handler;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
@@ -43,6 +44,8 @@ public class SoulissT19Handler extends SoulissGenericHandler {
     private final Logger logger = LoggerFactory.getLogger(SoulissT19Handler.class);
     byte t1nRawStateByte0 = 0xF;
     byte t1nRawStateBrigthnessByte1 = 0x00;
+    // false until the node has reported a brightness: a REFRESH before that has nothing to publish
+    boolean brightnessKnown = false;
 
     byte xSleepTime = 0;
 
@@ -52,6 +55,7 @@ public class SoulissT19Handler extends SoulissGenericHandler {
 
     @Override
     public void handleCommand(ChannelUID channelUID, Command command) {
+        logger.debug("handle command channel: {} command: {} ", channelUID, command);
         if (command instanceof RefreshType) {
             switch (channelUID.getId()) {
                 case SoulissBindingConstants.ONOFF_CHANNEL:
@@ -61,8 +65,10 @@ public class SoulissT19Handler extends SoulissGenericHandler {
                     }
                     break;
                 case SoulissBindingConstants.DIMMER_BRIGHTNESS_CHANNEL:
-                    updateState(SoulissBindingConstants.DIMMER_BRIGHTNESS_CHANNEL,
-                            PercentType.valueOf(String.valueOf((t1nRawStateBrigthnessByte1 / 255) * 100)));
+                    if (brightnessKnown) {
+                        updateState(SoulissBindingConstants.DIMMER_BRIGHTNESS_CHANNEL,
+                                toPercent(t1nRawStateBrigthnessByte1 & 0xFF));
+                    }
                     break;
                 default:
                     break;
@@ -82,7 +88,7 @@ public class SoulissT19Handler extends SoulissGenericHandler {
                     if (command instanceof PercentType percentCommand) {
                         updateState(SoulissBindingConstants.DIMMER_BRIGHTNESS_CHANNEL, percentCommand);
                         commandSEND(SoulissProtocolConstants.SOULISS_T1N_SET,
-                                (byte) (percentCommand.shortValue() * 255.00 / 100.00));
+                                (byte) Math.round((percentCommand.doubleValue() / 100.00) * 255.00));
                     } else if (command.equals(OnOffType.ON)) {
                         commandSEND(SoulissProtocolConstants.SOULISS_T1N_ON_CMD);
 
@@ -119,26 +125,42 @@ public class SoulissT19Handler extends SoulissGenericHandler {
         if (configurationMap.get(SoulissBindingConstants.SLEEP_CHANNEL) != null) {
             xSleepTime = ((BigDecimal) configurationMap.get(SoulissBindingConstants.SLEEP_CHANNEL)).byteValue();
         }
-        if (configurationMap.get(SoulissBindingConstants.CONFIG_SECURE_SEND) != null) {
-            bSecureSend = ((Boolean) configurationMap.get(SoulissBindingConstants.CONFIG_SECURE_SEND)).booleanValue();
-        }
+        // On unless it is switched off: the same default as in thing-types.xml, for a thing whose
+        // configuration reaches the handler without it.
+        bSecureSend = !Boolean.FALSE.equals(configurationMap.get(SoulissBindingConstants.CONFIG_SECURE_SEND));
     }
 
     public void setState(@Nullable PrimitiveType state) {
         super.setLastStatusStored();
         if (state != null) {
             updateState(SoulissBindingConstants.SLEEP_CHANNEL, OnOffType.OFF);
-            logger.debug("T19, setting state to {}", state.toFullString());
+            logger.debug("setState - T19, setting state to {}", state.toFullString());
             this.updateState(SoulissBindingConstants.ONOFF_CHANNEL, (OnOffType) state);
         }
     }
 
+    /** A brightness level (0..255) as a percent with two decimals, so that every level maps back to itself. */
+    private static PercentType toPercent(int level) {
+        return new PercentType(
+                BigDecimal.valueOf(level * 100L).divide(BigDecimal.valueOf(255), 2, RoundingMode.HALF_UP));
+    }
+
     public void setRawStateDimmerValue(byte dimmerValue) {
         try {
-            if (dimmerValue != t1nRawStateByte0 && dimmerValue >= 0) {
-                logger.debug("T19, setting dimmer to {}", dimmerValue);
-                updateState(SoulissBindingConstants.DIMMER_BRIGHTNESS_CHANNEL,
-                        PercentType.valueOf(String.valueOf(Math.round(((double) dimmerValue / 255) * 100))));
+            // The node sends the brightness as an unsigned byte; as a Java byte, levels above 127 are negative.
+            int level = dimmerValue & 0xFF;
+            logger.debug("setRawStateDimmerValue - T19, setting raw state to {} current: {}", level,
+                    t1nRawStateBrigthnessByte1);
+            // A light that is off reports brightness 0: skip it, so the channel keeps the level the light
+            // returns to when it is switched on again.
+            if (level != 0 || t1nRawStateByte0 != SoulissProtocolConstants.SOULISS_T1N_OFF_COIL) {
+                logger.debug("T19, setting dimmer to {} current: {} -  UUID: {} - {}", level,
+                        t1nRawStateBrigthnessByte1, this.getThing().getUID().getAsString(), this.getThing().getLabel());
+                t1nRawStateBrigthnessByte1 = dimmerValue;
+                brightnessKnown = true;
+                updateState(SoulissBindingConstants.DIMMER_BRIGHTNESS_CHANNEL, toPercent(level));
+                logger.debug("T19, setting dimmer to {} current: {} -  UUID: {} - {}", level,
+                        t1nRawStateBrigthnessByte1, this.getThing().getUID().getAsString(), this.getThing().getLabel());
             }
         } catch (Exception ex) {
             logger.warn("UUID: {}, had an update dimmer state error:{}", this.getThing().getUID().getAsString(),
@@ -148,13 +170,16 @@ public class SoulissT19Handler extends SoulissGenericHandler {
 
     @Override
     public void setRawState(byte rawState) {
+        logger.debug("setRawState - T19, setting raw state to {} current: {}", rawState, t1nRawStateByte0);
         // update Last Status stored time
         super.setLastStatusStored();
         // update item state only if it is different from previous
         if (t1nRawStateByte0 != rawState) {
             this.setState(getOhStateOnOffFromSoulissVal(rawState));
+            logger.debug("setRawState - setState - T19, done to {} current: {}", rawState, t1nRawStateByte0);
         }
         t1nRawStateByte0 = rawState;
+        logger.debug("setRawState - end - done to {} current: {}", rawState, t1nRawStateByte0);
     }
 
     @Override
@@ -173,11 +198,17 @@ public class SoulissT19Handler extends SoulissGenericHandler {
                 return SoulissProtocolConstants.SOULISS_T1N_ON_COIL;
             } else if (bCmd == SoulissProtocolConstants.SOULISS_T1N_OFF_CMD) {
                 return SoulissProtocolConstants.SOULISS_T1N_OFF_COIL;
-            } else if (bCmd >= SoulissProtocolConstants.SOULISS_T1N_TIMED) {
-                // SLEEP
-                return SoulissProtocolConstants.SOULISS_T1N_ON_COIL;
             }
+            // SLEEP is sent once: the node answers it with the good night state, never with ON_COIL, so it
+            // could not be confirmed and every resend would restart the countdown.
         }
         return -1;
+    }
+
+    @Override
+    public boolean keepCommandWhileResending(byte bCmd) {
+        // The node reports ON at the first step of the fade in, and only goes on fading while the command
+        // stays in its input slot. An OFF is confirmed when its fade out has ended, so it can be dropped.
+        return bSecureSend && bCmd == SoulissProtocolConstants.SOULISS_T1N_ON_CMD;
     }
 }

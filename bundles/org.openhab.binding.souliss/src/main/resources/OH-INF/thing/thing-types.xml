@@ -319,6 +319,11 @@
 				<description>Set sleep timer in cycles</description>
 				<default>5</default>
 			</parameter>
+			<parameter name="secureSend" type="boolean" required="false">
+				<label>Secure Send</label>
+				<description>Resend an ON or OFF command until the node reports the expected state</description>
+				<default>true</default>
+			</parameter>
 		</config-description>
 	</thing-type>
 

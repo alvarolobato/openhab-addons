@@ -93,6 +93,19 @@ public abstract class SoulissGenericHandler extends BaseThingHandler implements 
     }
 
     /**
+     * Whether a command that the node has already confirmed stays in its packet for as long as the
+     * packet is resent for another slot. A resent packet carries zero for every slot it no longer
+     * commands, and the node takes that zero as "no command"; a typical that needs its command for
+     * longer than the confirmation takes is stopped by it.
+     *
+     * @param bCommand the command sent
+     * @return true to keep sending it until the whole packet is done
+     */
+    public boolean keepCommandWhileResending(byte bCommand) {
+        return false;
+    }
+
+    /**
      * @return the SoulissNodeID
      */
     public int getNode() {
@@ -173,8 +186,13 @@ public abstract class SoulissGenericHandler extends BaseThingHandler implements 
     }
 
     public void setHealthy(byte shHealthy) {
-        this.updateState(SoulissBindingConstants.HEALTHY_CHANNEL, new DecimalType(shHealthy & 0xFF));
-        this.updateStatus(ThingStatus.ONLINE);
+        int health = shHealthy & 0xFF;
+        this.updateState(SoulissBindingConstants.HEALTHY_CHANNEL, new DecimalType(health));
+        if (health > 128) {
+            this.updateStatus(ThingStatus.ONLINE);
+        } else {
+            this.updateStatus(ThingStatus.OFFLINE);
+        }
     }
 
     public void setLastStatusStored() {
